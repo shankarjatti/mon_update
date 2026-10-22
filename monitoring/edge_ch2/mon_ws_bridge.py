@@ -28,41 +28,38 @@ import websockets
 
 NCH = 4
 BASE_PORT = 5201
-NBINS = 256                 # spectrum points sent to the UI
-PUSH_HZ = 5.0               # per-channel UI update rate (lowered to cut CPU)
-MAX_FFT_SEG = 8             # cap averaging segments per push (was unbounded -> 100% CPU)
-ACTIVE_MARGIN_DB = 8.0      # rms this far above the rolling floor = ACTIVE
+NFFT = 1024                 # FFT size sent to the UI (like the GNU Radio frequency sink default)
+FFT_SEGS = 8                # average up to this many 1024-point segments (8192 samples)
+TIME_N = 2048               # raw I/Q samples sent for the time plot
+RING = 8192                 # samples kept per channel for the current look
+MIN_PUSH = 4096             # push only when the look has this many settled samples (4 ms at 1 MS/s)
+PUSH_HZ = 5.0               # per-channel UI update rate
+SETTLE_S = 0.012            # drop the first 12 ms of a look: 10 ms retune/switch + margin
+ACTIVE_MARGIN_DB = 8.0      # rms this far above that band's own floor = ACTIVE (same rule as mon_server)
 
 CLIENTS = set()
-# latest per-channel state the ws server pushes
+# latest per-channel state the ws server pushes (empty until a look has real samples)
 STATE = {ch: {"ch": ch, "band": "", "freq_mhz": 0.0, "samp_rate": 0.0,
-              "spectrum": [], "time": [], "iq": [], "rms_dbfs": -120.0,
+              "spectrum": [], "i": [], "q": [], "rms_dbfs": -120.0,
               "floor_dbfs": -120.0, "active": False, "t": 0.0}
          for ch in range(1, NCH + 1)}
-FLOOR = {ch: -120.0 for ch in range(1, NCH + 1)}
+FLOOR = {}                  # (ch, band) -> lowest rms seen for that band (dBFS)
 
 
-def spectrum_db(x, nbins=NBINS):
-    """Average |FFT|^2 of x into nbins points, in dBFS (0 dB = full scale)."""
+def spectrum_db(x, nfft=NFFT, segs=FFT_SEGS):
+    """Averaged power spectrum, dBFS per bin (a full-scale complex tone reads 0 dBFS),
+    FFT-shifted so bin 0 = fc - fs/2. Needs at least nfft samples, else None."""
     n = len(x)
-    if n < nbins:
+    if n < nfft:
         return None
-    fftlen = nbins
-    acc = np.zeros(fftlen)
-    w = np.hanning(fftlen)
-    k = 0
-    # cap the number of averaged segments so a big IQ block can't spike CPU
-    nseg = min(MAX_FFT_SEG, (n - fftlen) // fftlen)
-    for s in range(max(1, nseg)):
-        i = s * fftlen
-        seg = x[i:i + fftlen] * w
+    w = np.hanning(nfft)
+    nseg = max(1, min(segs, n // nfft))
+    acc = np.zeros(nfft)
+    for s in range(nseg):
+        seg = x[n - (s + 1) * nfft: n - s * nfft] * w      # newest segments first
         acc += np.abs(np.fft.fftshift(np.fft.fft(seg))) ** 2
-        k += 1
-    if k == 0:
-        return None
-    acc /= k
-    db = 10 * np.log10(acc / fftlen + 1e-12)   # rough dBFS
-    return db
+    acc /= nseg
+    return 10 * np.log10(acc / (w.sum() ** 2) + 1e-15)
 
 
 async def chan_reader(ch):
@@ -72,6 +69,9 @@ async def chan_reader(ch):
     sub.setsockopt(zmq.RCVHWM, 16)
     sub.connect("tcp://127.0.0.1:%d" % (BASE_PORT + ch - 1))
     last_push = 0.0
+    key = None              # (band, look, frame) of the look being buffered
+    chunks, have, skip = [], 0, 0
+    hdr = {}
     while True:
         try:
             hdr_b, iq_b = await sub.recv_multipart()
@@ -81,45 +81,46 @@ async def chan_reader(ch):
             h = json.loads(hdr_b.decode())
         except Exception:
             continue
+        fs = float(h.get("samp_rate", 0.0) or 0.0)
+        if fs <= 0:
+            continue                       # no sample rate in the feed: nothing honest to draw
+        k = (h.get("band", ""), h.get("look", 0), h.get("frame", 0))
+        if k != key:                       # new look -> new buffer, skip the retune/settle samples
+            key, chunks, have, hdr = k, [], 0, h
+            skip = int(SETTLE_S * fs)
         x = np.frombuffer(iq_b, dtype=np.complex64)
+        if skip:
+            d = min(skip, x.size); x = x[d:]; skip -= d
         if x.size == 0:
             continue
-        rms = float(10 * np.log10(np.mean(np.abs(x) ** 2) + 1e-12))
-        # rolling noise floor (slow) when not clearly a signal
-        f = FLOOR[ch]
-        if rms < f + ACTIVE_MARGIN_DB:
-            f = 0.98 * f + 0.02 * rms
-        FLOOR[ch] = f
-        active = rms > f + ACTIVE_MARGIN_DB
+        chunks.append(x); have += x.size
+        while len(chunks) > 1 and have - chunks[0].size >= RING:
+            have -= chunks[0].size; chunks.pop(0)
         now = time.time()
-        if now - last_push >= 1.0 / PUSH_HZ:
-            db = spectrum_db(x)
-            spec = [round(float(v), 1) for v in db[::max(1, len(db)//NBINS)][:NBINS]] if db is not None else STATE[ch]["spectrum"]
-            # REAL time-domain envelope: |IQ| block-averaged into 256 points (dBFS)
-            tpts = 256
-            a = np.abs(x)
-            if a.size >= tpts:
-                env = a[:a.size//tpts*tpts].reshape(tpts, -1).mean(axis=1)
-                tenv = [round(float(v), 3) for v in (20*np.log10(env + 1e-9))]
-            else:
-                tenv = STATE[ch]["time"]
-            # REAL IQ scatter: 160 subsampled samples, normalised to the block peak
-            step = max(1, x.size // 160)
-            samp = x[::step][:160]
-            mx = float(np.abs(samp).max()) or 1.0
-            iq = []
-            for v in samp:
-                iq.append(round(float(v.real)/mx, 3)); iq.append(round(float(v.imag)/mx, 3))
-            STATE[ch] = {
-                "ch": ch, "band": h.get("band", ""),
-                "freq_mhz": float(h.get("freq", 0.0)) / 1e6,
-                "samp_rate": float(h.get("samp_rate", 2e6)),
-                "spectrum": spec, "time": tenv, "iq": iq,
-                "rms_dbfs": round(rms, 1),
-                "floor_dbfs": round(f, 1), "active": bool(active), "t": now,
-            }
-            last_push = now
-            await broadcast(STATE[ch])
+        if now - last_push < 1.0 / PUSH_HZ or have < MIN_PUSH:
+            continue
+        last_push = now
+        buf = np.concatenate(chunks)[-RING:]
+        db = spectrum_db(buf)
+        if db is None:
+            continue
+        seg = buf[-TIME_N:]
+        rms = float(10 * np.log10(np.mean(np.abs(buf[-4096:]) ** 2) + 1e-15))
+        band = hdr.get("band", "")
+        fk = (ch, band)
+        fl = FLOOR.get(fk)
+        if fl is None or rms < fl:
+            fl = FLOOR[fk] = rms
+        STATE[ch] = {
+            "ch": ch, "band": band, "freq_mhz": float(hdr.get("freq", 0.0)) / 1e6,
+            "samp_rate": fs, "nfft": NFFT, "nsamp": int(buf.size),
+            "spectrum": [round(float(v), 1) for v in db],
+            "i": [round(float(v), 5) for v in seg.real],
+            "q": [round(float(v), 5) for v in seg.imag],
+            "rms_dbfs": round(rms, 1), "floor_dbfs": round(fl, 1),
+            "active": bool(rms > fl + ACTIVE_MARGIN_DB), "t": now,
+        }
+        await broadcast(STATE[ch])
 
 
 async def broadcast(msg):

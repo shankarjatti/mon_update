@@ -36,7 +36,7 @@ CH1_UNCONV = [
     ("FPV 1080-1280",        1180e6, 256.0),
     ("Video 5645-5945",      5795e6, 256.0),
 ]
-CH1_DRONEID = ("DroneID listen", 2442e6, 2010.0)   # listen band TBD; placed at 2.4 for now
+CH1_DRONEID = ("DroneID listen", 2442e6, 2000.0)   # user 2026-10-22: DroneID listen = 2 s dwell (+10 ms switch). Listen band TBD; placed at 2.4 for now
 
 # ---- CH2  Terrestrial + Air/Maritime  (ch1, A/RX2) ----
 CH2_TERR = [

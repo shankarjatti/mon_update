@@ -87,6 +87,11 @@
   .badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px}
   .badge.on{background:#e7f6ee;color:var(--green)}
   .badge.off{background:#f0f2f5;color:var(--muted)}
+  .plot.wide{grid-column:1/-1}
+  .gtools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 6px}
+  .gtools button{padding:2px 8px;font-size:11px}
+  .gtools button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .gtools .hint{font-size:11px;color:var(--muted);margin-left:auto}
 </style>
 </head>
 <body>
@@ -121,7 +126,7 @@
   <!-- ============ MONITORING BACKEND ============ -->
   <section class="view" id="view-backend">
     <h1>Monitoring Backend</h1>
-    <div class="sub">Per‑channel bands, dwell &amp; switching time, hardware state — the scheduler config for mon_scan / mon_server.</div>
+    <div class="sub">Saved, editable copy of the scan plan. It does NOT show or change the running scanner (control API not wired), and its values can differ from the running scan_plan.py.</div>
     <div class="bar">
       <div class="chips">
         <label>Switch (ms) <input class="num" id="switchMs" type="number" min="0" step="1"></label>
@@ -144,22 +149,24 @@
 <script>
 /* =================== CONFIG (from scan_plan) =================== */
 const PORTS_HW = ["A/RX1","A/RX2","B/RX1","B/RX2"];
-const INITIAL = {"switch_ms": 10.0, "samp_rate": 2000000.0, "channels": [{"name": "CH1 Drone/Replay", "port": "A/RX1", "bands": [{"name": "Wi-Fi 2.4 2412-2472", "freq_mhz": 2442.0, "dwell_ms": 256.0}, {"name": "Wi-Fi 5.2 5180-5240", "freq_mhz": 5210.0, "dwell_ms": 256.0}, {"name": "Wi-Fi 5.8 5745-5825", "freq_mhz": 5785.0, "dwell_ms": 256.0}, {"name": "LoRa 865-928", "freq_mhz": 896.5, "dwell_ms": 257.0}, {"name": "Drone 433", "freq_mhz": 433.9, "dwell_ms": 256.0}, {"name": "FPV 1080-1280", "freq_mhz": 1180.0, "dwell_ms": 256.0}, {"name": "Video 5645-5945", "freq_mhz": 5795.0, "dwell_ms": 256.0}]}, {"name": "CH2 Terrestrial", "port": "A/RX2", "bands": [{"name": "D-STAR 145.0", "freq_mhz": 145.0, "dwell_ms": 50.0}, {"name": "TETRA 420.0", "freq_mhz": 420.0, "dwell_ms": 142.0}, {"name": "DMR 446.100", "freq_mhz": 446.1, "dwell_ms": 150.0}, {"name": "P25 450.0", "freq_mhz": 450.0, "dwell_ms": 450.0}, {"name": "NXDN 451.0", "freq_mhz": 451.0, "dwell_ms": 200.0}, {"name": "AIS 161.975", "freq_mhz": 161.975, "dwell_ms": 400.0}, {"name": "ADS-B 1090", "freq_mhz": 1090.0, "dwell_ms": 400.0}]}, {"name": "CH3 Radar", "port": "B/RX1", "bands": [{"name": "L 1200-1400", "freq_mhz": 1300.0, "dwell_ms": 150.0}, {"name": "S 2700-3100", "freq_mhz": 2900.0, "dwell_ms": 150.0}, {"name": "S 3000-3500", "freq_mhz": 3250.0, "dwell_ms": 150.0}, {"name": "C 5140-5900", "freq_mhz": 5520.0, "dwell_ms": 150.0}, {"name": "C 5400-5900", "freq_mhz": 5650.0, "dwell_ms": 150.0}]}, {"name": "CH4 Cellular DL", "port": "B/RX2", "bands": [{"name": "2G 925.2-934.8", "freq_mhz": 930.0, "dwell_ms": 10.0}, {"name": "2G 935.2-959.8", "freq_mhz": 947.5, "dwell_ms": 10.0}, {"name": "2G 1805-1880", "freq_mhz": 1842.5, "dwell_ms": 10.0}, {"name": "B28 758-803", "freq_mhz": 780.5, "dwell_ms": 10.0}, {"name": "B5 869-894", "freq_mhz": 881.5, "dwell_ms": 10.0}, {"name": "B8 925-960", "freq_mhz": 942.5, "dwell_ms": 10.0}, {"name": "B1 2110-2170", "freq_mhz": 2140.0, "dwell_ms": 10.0}, {"name": "B40 2300-2400", "freq_mhz": 2350.0, "dwell_ms": 10.0}, {"name": "n78 3300-3670", "freq_mhz": 3485.0, "dwell_ms": 10.0}]}]};
+const INITIAL = {"switch_ms": 10.0, "samp_rate": 1000000.0, "channels": [{"name": "CH1 Drone/Replay", "port": "A/RX1", "bands": [{"name": "Wi-Fi 2.4 2412-2472", "freq_mhz": 2442.0, "dwell_ms": 256.0, "rep": 10}, {"name": "Wi-Fi 5.2 5180-5240", "freq_mhz": 5210.0, "dwell_ms": 256.0, "rep": 10}, {"name": "Wi-Fi 5.8 5745-5825", "freq_mhz": 5785.0, "dwell_ms": 256.0, "rep": 10}, {"name": "LoRa 865-928", "freq_mhz": 896.5, "dwell_ms": 257.0, "rep": 10}, {"name": "DroneID listen", "freq_mhz": 2442.0, "dwell_ms": 2000.0, "rep": 1}, {"name": "Drone 433", "freq_mhz": 433.9, "dwell_ms": 256.0, "rep": 2}, {"name": "FPV 1080-1280", "freq_mhz": 1180.0, "dwell_ms": 256.0, "rep": 2}, {"name": "Video 5645-5945", "freq_mhz": 5795.0, "dwell_ms": 256.0, "rep": 2}]}, {"name": "CH2 Terrestrial", "port": "A/RX2", "bands": [{"name": "D-STAR 145.0", "freq_mhz": 145.0, "dwell_ms": 50.0}, {"name": "TETRA 420.0", "freq_mhz": 420.0, "dwell_ms": 142.0}, {"name": "DMR 446.100", "freq_mhz": 446.1, "dwell_ms": 150.0}, {"name": "P25 450.0", "freq_mhz": 450.0, "dwell_ms": 450.0}, {"name": "NXDN 451.0", "freq_mhz": 451.0, "dwell_ms": 200.0}, {"name": "AIS 161.975", "freq_mhz": 161.975, "dwell_ms": 400.0}, {"name": "ADS-B 1090", "freq_mhz": 1090.0, "dwell_ms": 400.0}]}, {"name": "CH3 Radar", "port": "B/RX1", "bands": [{"name": "L 1200-1400", "freq_mhz": 1300.0, "dwell_ms": 150.0}, {"name": "S 2700-3100", "freq_mhz": 2900.0, "dwell_ms": 150.0}, {"name": "S 3000-3500", "freq_mhz": 3250.0, "dwell_ms": 150.0}, {"name": "C 5140-5900", "freq_mhz": 5520.0, "dwell_ms": 150.0}, {"name": "C 5400-5900", "freq_mhz": 5650.0, "dwell_ms": 150.0}]}, {"name": "CH4 Cellular DL", "port": "B/RX2", "bands": [{"name": "2G 925.2-934.8", "freq_mhz": 930.0, "dwell_ms": 10.0}, {"name": "2G 935.2-959.8", "freq_mhz": 947.5, "dwell_ms": 10.0}, {"name": "2G 1805-1880", "freq_mhz": 1842.5, "dwell_ms": 10.0}, {"name": "B28 758-803", "freq_mhz": 780.5, "dwell_ms": 10.0}, {"name": "B5 869-894", "freq_mhz": 881.5, "dwell_ms": 10.0}, {"name": "B8 925-960", "freq_mhz": 942.5, "dwell_ms": 10.0}, {"name": "B1 2110-2170", "freq_mhz": 2140.0, "dwell_ms": 10.0}, {"name": "B40 2300-2400", "freq_mhz": 2350.0, "dwell_ms": 10.0}, {"name": "n78 3300-3670", "freq_mhz": 3485.0, "dwell_ms": 10.0}]}]};
 let CFG = JSON.parse(JSON.stringify(INITIAL));
 
-/* =================== HARDWARE STATE (placeholder until backend feeds it) =================== */
-const HW = { usrp:"X310 31082D8", link:"1 Gb/s", mode:"MON", lock:[true,true,true,true], overflow:false, cpu_gov:"performance" };
+/* =================== STATUS CHIPS (live feed only) =================== */
+// Only facts the page can verify: is the feed connected, does each channel deliver data
+// right now, and which sample rate the feed reports. LO lock / overflow / CPU are NOT
+// reported by the backend yet, so they are not shown (no placeholder values).
 function renderHW(){
-  const lockChips = CFG.channels.map((c,i)=>{
-    const v=HW.lock[i]; const col = v===true?'var(--green)': v===false?'var(--red)':'#c9d0d9';
-    return `<span class="chip"><span class="lock" style="background:${col}"></span>CH${i+1} LO</span>`;
-  }).join('');
-  document.getElementById('hwchips').innerHTML =
-    `<span class="chip ok">USRP <b>${HW.usrp}</b></span>`+
-    `<span class="chip ${HW.link.startsWith('1')?'warn':'ok'}">Link <b>${HW.link}</b></span>`+
-    `<span class="chip good">Mode <b>${HW.mode}</b></span>`+
-    `<span class="chip ${HW.overflow?'bad':'good'}">Overflow <b>${HW.overflow?'yes':'no'}</b></span>`+
-    `<span class="chip">CPU <b>${HW.cpu_gov}</b></span>`+ lockChips;
+  const now=performance.now(), chips=[];
+  chips.push(`<span class="chip ${monConnected?'good':'bad'}">Feed <b>${monConnected?'connected':'offline'}</b></span>`);
+  for(let c=1;c<=4;c++){
+    const m=MON[c], live=m && (now-m._rx)<2500;
+    chips.push(`<span class="chip"><span class="lock" style="background:${live?'var(--green)':'var(--red)'}"></span>CH${c} ${live?'live':'no data'}</span>`);
+  }
+  const sr=[1,2,3,4].map(c=>MON[c]&&MON[c].samp_rate).find(v=>v>0);
+  chips.push(`<span class="chip">Sample rate <b>${sr?(sr/1e6)+' MS/s':'—'}</b></span>`);
+  chips.push(`<span class="chip good">Mode <b>MON</b></span>`);
+  document.getElementById('hwchips').innerHTML=chips.join('')+`<span class="note">LO lock · overflow · CPU: not reported by the backend yet</span>`;
 }
 
 /* =================== VIEW SWITCHING =================== */
@@ -172,34 +179,35 @@ document.querySelectorAll('.navbtn').forEach(btn=>btn.onclick=()=>{
   VIEWS.forEach(v=>document.getElementById('view-'+v).classList.toggle('on',v===curView));
   document.getElementById('activeTag').textContent = TAGMAP[curView];
   document.getElementById('activeTag').classList.toggle('red', curView==='imsi');
+  if(S[curView]){ S[curView].lastMsg=null; S[curView]._aoa=0; }
 });
 
 /* =================== SIGNAL-VIEW SCAFFOLD (FFT / TIME / POLAR) =================== */
 // each signal channel: a header, FFT + Time + Polar canvases, and a detections table.
 function signalViewHTML(cfg){
+  const tools=(g,hold)=>`<div class="gtools"><button id="${cfg.id}-${g}-auto">Autoscale</button><button id="${cfg.id}-${g}-reset">Reset zoom</button>${hold?`<button id="${cfg.id}-${g}-hold">Max hold</button>`:''}<span class="hint">drag = zoom · wheel = scale · shift+drag = pan · double-click = reset</span></div>`;
   return `
   <h1>${cfg.title}</h1>
   <div class="sub">${cfg.sub}</div>
   <div class="bar">
     <div class="chips">
-      <span class="chip ok">Band <b id="${cfg.id}-band">${cfg.bands[0]}</b></span>
+      <span class="chip ok">Band <b id="${cfg.id}-band">—</b></span>
       <span class="chip">Center <b id="${cfg.id}-cf">—</b></span>
-      <span class="chip good" id="${cfg.id}-stat">● monitoring</span>
+      <span class="chip">Span <b id="${cfg.id}-span">—</b></span>
+      <span class="chip" id="${cfg.id}-stat">● waiting for data</span>
     </div>
     <div class="chips">
-      <label>Band
-        <select id="${cfg.id}-bandsel">${cfg.bands.map((b,i)=>`<option value="${i}">${b}</option>`).join('')}</select>
+      <label>Show band
+        <select id="${cfg.id}-bandsel"><option value="">All bands (sweep)</option></select>
       </label>
-      <div class="seg" id="${cfg.id}-mode">
-        <button class="on" data-m="scan">Scan</button><button data-m="pin">Pin band</button>
-      </div>
     </div>
   </div>
   <div class="plots">
-    <div class="plot"><h3>FFT — spectrum <b id="${cfg.id}-pk">peak —</b></h3><canvas id="${cfg.id}-fft" height="200"></canvas></div>
-    <div class="plot"><h3>Time — ${cfg.timeLabel} <b id="${cfg.id}-tv">—</b></h3><canvas id="${cfg.id}-time" height="200"></canvas></div>
-    <div class="plot"><h3>${cfg.polarLabel} <b id="${cfg.id}-pv">—</b></h3><canvas id="${cfg.id}-polar" height="230"></canvas></div>
-    <div class="plot"><h3>${cfg.tableTitle} <b id="${cfg.id}-cnt">0</b></h3>
+    <div class="plot"><h3>Frequency — spectrum <b id="${cfg.id}-pk">peak —</b></h3>${tools('fft',true)}<canvas id="${cfg.id}-fft" style="height:270px"></canvas></div>
+    <div class="plot"><h3>Time — I / Q <b id="${cfg.id}-tv">—</b></h3>${tools('time',false)}<canvas id="${cfg.id}-time" style="height:270px"></canvas></div>
+    <div class="plot"><h3>AOA — polar (azimuth) <b>0 bearings</b></h3><canvas id="${cfg.id}-polar" style="height:270px"></canvas></div>
+    <div class="plot"><h3>IQ scatter (I vs Q) <b id="${cfg.id}-pv">—</b></h3><canvas id="${cfg.id}-iq" style="height:270px"></canvas></div>
+    <div class="plot wide"><h3>${cfg.tableTitle} <b id="${cfg.id}-cnt">0</b></h3>
       <table class="det"><thead>${cfg.tableHead}</thead><tbody id="${cfg.id}-tbody"></tbody></table>
     </div>
   </div>`;
@@ -207,7 +215,7 @@ function signalViewHTML(cfg){
 
 const SIGVIEWS = {
   drone:{ id:"drone", kind:"drone",
-    title:"Drone Detection — CH1", sub:"A/RX2 · Wi‑Fi / LoRa / FPV replay bands · 2.5× beacon‑gap dwell",
+    title:"Drone Detection — CH1", sub:"A/RX1 · Wi‑Fi / LoRa / drone bands · every look = 10 ms switch + dwell",
     bands:["Wi‑Fi 2.4 2442","Wi‑Fi 5.2 5210","Wi‑Fi 5.8 5785","LoRa 896.5","Drone 433.9","FPV 1180","Video 5795"],
     timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections",
     tableHead:"<tr><th>Band</th><th class='r'>MHz</th><th class='r'>RMS dB</th><th class='r'></th><th></th></tr>" },
@@ -277,47 +285,12 @@ document.querySelectorAll('#terr-mode button').forEach(b=>b.onclick=()=>{
   el.className='chip '+(mode==='auto'?'ok':'good');
 });
 
-/* =================== PER‑VIEW STATE + WIRING =================== */
-const S = {}; // runtime state per view id
-for(const k in SIGVIEWS){
-  const cf = SIGVIEWS[k];
-  S[k] = { band:0, mode:"scan", t:0, fftBg:new Float32Array(256), rows:[] };
-  const sel = document.getElementById(cf.id+'-bandsel');
-  sel.onchange = ()=>{ S[k].band = +sel.value; document.getElementById(cf.id+'-band').textContent = cf.bands[S[k].band]; refreshBandInfo(k); };
-  document.querySelectorAll('#'+cf.id+'-mode button').forEach(b=>b.onclick=()=>{
-    document.querySelectorAll('#'+cf.id+'-mode button').forEach(x=>x.classList.toggle('on',x===b));
-    S[k].mode=b.dataset.m;
-    document.getElementById(cf.id+'-stat').textContent = b.dataset.m==='pin' ? '● pinned (hold band)' : '● monitoring';
-  });
-  refreshBandInfo(k);
-}
-function refreshBandInfo(k){
-  const cf=SIGVIEWS[k], st=S[k];
-  const mhz = cfBandMHz(k, st.band);
-  document.getElementById(cf.id+'-cf').textContent = mhz.toFixed(mhz<1000?3:1)+' MHz';
-}
-function cfBandMHz(k, i){
-  // pull the matching channel's freq from CFG so the backend edits flow through
-  const chIdx = {drone:0,terr:1,radar:2,imsi:3}[k];
-  const b = CFG.channels[chIdx].bands[i];
-  return b ? b.freq_mhz : 0;
-}
-
-/* =================== LIVE PLOTS (real monitoring data only) =================== */
-// All panels draw only what the dwell actually received (from mon_ws_bridge):
-// real spectrum, real |IQ| envelope, real IQ scatter. No synthetic data.
-function drawGrid(ctx,w,h,rows=4,cols=8){
-  ctx.strokeStyle=getCSS('--grid');ctx.lineWidth=1;ctx.beginPath();
-  for(let i=1;i<rows;i++){const y=h*i/rows;ctx.moveTo(0,y);ctx.lineTo(w,y);}
-  for(let i=1;i<cols;i++){const x=w*i/cols;ctx.moveTo(x,0);ctx.lineTo(x,h);}
-  ctx.stroke();
-}
-function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
-
-function fitCanvas(cv){ const w=cv.clientWidth||600; if(cv.width!==w){cv.width=w;} return cv; }
-
-/* ====== LIVE monitoring feed (mon_ws_bridge) ====== */
-const MON = {1:null,2:null,3:null,4:null};   // latest per-channel {band,freq_mhz,spectrum,rms_dbfs,active,...}
+/* =================== PER‑VIEW STATE + LIVE FEED =================== */
+// Only real data is drawn: the spectrum / I-Q come from mon_ws_bridge (the samples the
+// radio received in this look). Nothing is simulated. No data -> "waiting for data".
+const S = {};
+const MON  = {1:null,2:null,3:null,4:null};   // latest message per channel
+const LAST = {1:{},2:{},3:{},4:{}};            // latest message per channel AND band
 const CH_OF = {drone:1, terr:2, radar:3, imsi:4};
 let monWs=null, monConnected=false;
 function monConnect(){
@@ -326,7 +299,9 @@ function monConnect(){
   monWs.onclose=()=>{ monConnected=false; setTimeout(monConnect,2000); };
   monWs.onerror=()=>{ try{monWs.close();}catch(e){} };
   monWs.onmessage=(ev)=>{ try{ const m=JSON.parse(ev.data);
-    if(m.type==='mon'&&m.ch){ MON[m.ch]=m; }
+    if(m.type==='mon'&&m.ch){
+      if(m.spectrum && m.spectrum.length>8){ m._rx=performance.now(); MON[m.ch]=m; if(m.band) LAST[m.ch][m.band]=m; }
+    }
     else if(m.type==='ch2_mode'){ syncCh2Mode(m.mode); }
     else if(m.type==='ch2_lock'){ syncCh2Lock(m); }
   }catch(e){} };
@@ -368,125 +343,268 @@ setInterval(function(){
     el.className='chip ok';
   }
 }, 120);
-// map our dBFS spectrum (approx -120..0) to the canvas' -100..-30 display window
-function monToDisplay(v){ return Math.max(-100, Math.min(-30, v)); }
-function updateLiveChips(k, live){
-  const cf=SIGVIEWS[k];
-  const bandEl=document.getElementById(cf.id+'-band'); if(bandEl&&live.band) bandEl.textContent=live.band;
-  const cfEl=document.getElementById(cf.id+'-cf'); if(cfEl&&live.freq_mhz) cfEl.textContent=live.freq_mhz.toFixed(live.freq_mhz<1000?3:1)+' MHz';
-  const stat=document.getElementById(cf.id+'-stat');
-  if(stat){ stat.textContent = live.active ? ('● ACTIVE '+live.rms_dbfs+' dB') : ('● scanning '+live.rms_dbfs+' dB');
-    stat.className = 'chip '+(live.active?'bad':'good'); }
+
+
+/* =================== GNU Radio-style graph ===================
+   axes with units · drag = zoom box · wheel = scale · shift+drag = pan · double-click = autoscale/reset
+   hover = cursor readout · y axis autoscales until you zoom it (like the QT GUI sinks). */
+function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function niceStep(range,target){ const raw=range/Math.max(1,target), p=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/p; return (f<1.5?1:f<3?2:f<7?5:10)*p; }
+function fmtTick(v,step){ v=Math.round(v/step)*step; const d=Math.max(0,Math.min(6,Math.ceil(-Math.log10(step)-1e-9))); return v.toFixed(d); }
+
+class Graph{
+  constructor(cv,o){
+    this.cv=cv; this.o=o||{}; this.xr=null; this.yr=null; this.data=null; this.hov=null; this.drag=null;
+    this.m={l:62,r:12,t:22,b:34}; this._ay=null; this._key=null;
+    cv.style.cursor='crosshair';
+    cv.addEventListener('mousedown',e=>this.down(e));
+    cv.addEventListener('mousemove',e=>this.move(e));
+    cv.addEventListener('mouseleave',()=>{ if(!this.drag){ this.hov=null; this.draw(); } });
+    window.addEventListener('mouseup',e=>this.up(e));
+    window.addEventListener('mousemove',e=>{ if(this.drag) this.move(e); });
+    cv.addEventListener('wheel',e=>this.wheel(e),{passive:false});
+    cv.addEventListener('dblclick',()=>this.reset());
+  }
+  reset(){ this.xr=null; this.yr=null; this._ay=null; this.draw(); }
+  autoscale(){ this.yr=null; this._ay=null; this.draw(); }
+  setData(d){
+    if(this._key!==d.key){ this._key=d.key; this.xr=null; this.yr=null; this._ay=null; }   // new band -> full view
+    this.data=d; this.draw();
+  }
+  rect(){ const w=this.cv.clientWidth,h=this.cv.clientHeight; return {x:this.m.l,y:this.m.t,w:w-this.m.l-this.m.r,h:h-this.m.t-this.m.b}; }
+  xRange(){ return this.xr||this.data.xfull; }
+  yAuto(){
+    const d=this.data,[x0,x1]=this.xRange(); let lo=Infinity,hi=-Infinity;
+    for(const s of d.series){ if(s.ghost) continue; const y=s.y; for(let i=0;i<d.n;i++){ const x=d.x(i); if(x<x0||x>x1) continue; const v=y[i]; if(v<lo)lo=v; if(v>hi)hi=v; } }
+    if(!isFinite(lo)){ lo=0; hi=1; }
+    if(this.o.symmetric){ const a=Math.max(Math.abs(lo),Math.abs(hi),1e-4)*1.15; lo=-a; hi=a; }
+    else{ const pad=Math.max((hi-lo)*0.1,3); lo-=pad; hi+=pad; }
+    const step=niceStep(hi-lo,6); lo=Math.floor(lo/step)*step; hi=Math.ceil(hi/step)*step;
+    if(this._ay){ lo=this._ay[0]*0.7+lo*0.3; hi=this._ay[1]*0.7+hi*0.3; }   // smooth: no jitter
+    this._ay=[lo,hi]; return [lo,hi];
+  }
+  yRange(){ return this.yr||this.yAuto(); }
+  blank(msg){
+    const cv=this.cv,w=cv.clientWidth,h=cv.clientHeight; if(w<80||h<80) return;
+    const dpr=window.devicePixelRatio||1; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,w,h);
+    c.fillStyle=getCSS('--muted'); c.font='12px sans-serif'; c.textAlign='center'; c.textBaseline='middle'; c.fillText(msg,w/2,h/2);
+  }
+  draw(){
+    const cv=this.cv; if(!this.data){ this.blank('waiting for data…'); return; }
+    const w=cv.clientWidth,h=cv.clientHeight; if(w<80||h<80) return;
+    const dpr=window.devicePixelRatio||1;
+    if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+    const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,w,h);
+    const R=this.rect(), d=this.data, [x0,x1]=this.xRange(), [y0,y1]=this.yRange();
+    const X=v=>R.x+(v-x0)/(x1-x0)*R.w, Y=v=>R.y+R.h-(v-y0)/(y1-y0)*R.h;
+    c.fillStyle=getCSS('--plotbg'); c.fillRect(R.x,R.y,R.w,R.h);
+    c.font='11px sans-serif'; c.fillStyle=getCSS('--muted'); c.strokeStyle=getCSS('--grid'); c.lineWidth=1;
+    const sx=niceStep(x1-x0,Math.max(3,R.w/90)), sy=niceStep(y1-y0,Math.max(3,R.h/38));
+    c.textAlign='center'; c.textBaseline='top';
+    for(let v=Math.ceil(x0/sx)*sx; v<=x1+sx*1e-6; v+=sx){ const px=Math.round(X(v))+0.5; c.beginPath(); c.moveTo(px,R.y); c.lineTo(px,R.y+R.h); c.stroke(); c.fillText(fmtTick(v,sx),px,R.y+R.h+4); }
+    c.textAlign='right'; c.textBaseline='middle';
+    for(let v=Math.ceil(y0/sy)*sy; v<=y1+sy*1e-6; v+=sy){ const py=Math.round(Y(v))+0.5; c.beginPath(); c.moveTo(R.x,py); c.lineTo(R.x+R.w,py); c.stroke(); c.fillText(fmtTick(v,sy),R.x-6,py); }
+    c.textAlign='center'; c.textBaseline='bottom'; c.fillText(d.xlabel||'',R.x+R.w/2,h-1);
+    c.textAlign='left'; c.textBaseline='top'; c.fillText(d.ylabel||'',2,1);
+    c.save(); c.beginPath(); c.rect(R.x,R.y,R.w,R.h); c.clip();
+    for(const s of d.series){
+      c.strokeStyle=s.color; c.lineWidth=s.ghost?1:1.4; c.globalAlpha=s.ghost?0.5:1; c.beginPath();
+      const n=d.n, y=s.y;
+      if(n>2*R.w){                                  // many points: min/max per pixel column
+        const cols=Math.max(1,Math.floor(R.w)), mn=new Float32Array(cols).fill(Infinity), mx=new Float32Array(cols).fill(-Infinity);
+        for(let i=0;i<n;i++){ const px=Math.floor((d.x(i)-x0)/(x1-x0)*cols); if(px<0||px>=cols) continue; const v=y[i]; if(v<mn[px])mn[px]=v; if(v>mx[px])mx[px]=v; }
+        for(let px=0;px<cols;px++){ if(mn[px]===Infinity) continue; const xx=R.x+px+0.5; c.moveTo(xx,Y(mn[px])); c.lineTo(xx,Y(mx[px])); }
+      }else{ let on=false; for(let i=0;i<n;i++){ const xx=X(d.x(i)), yy=Y(y[i]); if(!on){ c.moveTo(xx,yy); on=true; } else c.lineTo(xx,yy); } }
+      c.stroke(); c.globalAlpha=1;
+    }
+    if(d.peak!=null){ const px=X(d.x(d.peak)), py=Y(d.series[d.series.length-1].y[d.peak]); c.fillStyle=getCSS('--red'); c.beginPath(); c.arc(px,py,3,0,7); c.fill(); }
+    c.restore();
+    c.strokeStyle=getCSS('--line'); c.lineWidth=1; c.strokeRect(R.x+0.5,R.y+0.5,R.w,R.h);
+    if(this.hov && !this.drag){                      // cursor readout
+      const p=this.hov, xv=x0+(p.x-R.x)/R.w*(x1-x0);
+      let i=Math.round((xv-d.x(0))/((d.x(d.n-1)-d.x(0))/(d.n-1))); i=Math.max(0,Math.min(d.n-1,i));
+      c.strokeStyle='rgba(23,105,224,0.5)'; c.beginPath(); c.moveTo(Math.round(p.x)+0.5,R.y); c.lineTo(Math.round(p.x)+0.5,R.y+R.h); c.stroke();
+      const txt=d.readout(i); c.font='11px sans-serif'; const tw=c.measureText(txt).width+10;
+      c.fillStyle='rgba(255,255,255,0.92)'; c.fillRect(R.x+R.w-tw-4,R.y+4,tw,18); c.strokeStyle=getCSS('--line'); c.strokeRect(R.x+R.w-tw-4+0.5,R.y+4.5,tw,18);
+      c.fillStyle=getCSS('--ink'); c.textAlign='left'; c.textBaseline='middle'; c.fillText(txt,R.x+R.w-tw+1,R.y+13);
+    }
+    if(this.drag && !this.drag.pan){                 // zoom box
+      const g=this.drag; c.fillStyle='rgba(23,105,224,0.12)'; c.strokeStyle='#1769e0'; c.setLineDash([4,3]);
+      const bx=Math.min(g.x0,g.x), by=Math.min(g.y0,g.y), bw=Math.abs(g.x-g.x0), bh=Math.abs(g.y-g.y0);
+      c.fillRect(bx,by,bw,bh); c.strokeRect(bx+0.5,by+0.5,bw,bh); c.setLineDash([]);
+    }
+    if(this.xr||this.yr){ c.font='11px sans-serif'; c.fillStyle=getCSS('--amber'); c.textAlign='left'; c.textBaseline='top'; c.fillText('zoomed — double-click to reset',R.x+6,R.y+4); }
+  }
+  pt(e){ const r=this.cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+  inR(p){ const R=this.rect(); return p.x>=R.x&&p.x<=R.x+R.w&&p.y>=R.y&&p.y<=R.y+R.h; }
+  down(e){
+    if(e.button!==0||!this.data) return; const p=this.pt(e); if(!this.inR(p)) return;
+    this.drag={x0:p.x,y0:p.y,x:p.x,y:p.y,pan:e.shiftKey,xr:this.xRange().slice(),yr:this.yRange().slice()}; e.preventDefault();
+  }
+  move(e){
+    if(!this.data) return; const p=this.pt(e);
+    if(this.drag){
+      this.drag.x=p.x; this.drag.y=p.y;
+      if(this.drag.pan){ const R=this.rect(), g=this.drag;
+        const dx=(p.x-g.x0)/R.w*(g.xr[1]-g.xr[0]), dy=(p.y-g.y0)/R.h*(g.yr[1]-g.yr[0]);
+        this.xr=[g.xr[0]-dx,g.xr[1]-dx]; this.yr=[g.yr[0]+dy,g.yr[1]+dy]; }
+      this.hov=null; this.draw();
+    }else{ this.hov=this.inR(p)?p:null; this.draw(); }
+  }
+  up(e){
+    const g=this.drag; if(!g) return; this.drag=null;
+    if(!g.pan){
+      const R=this.rect(), zx=Math.abs(g.x-g.x0)>6, zy=Math.abs(g.y-g.y0)>6;
+      const xs=v=>g.xr[0]+(v-R.x)/R.w*(g.xr[1]-g.xr[0]), ys=v=>g.yr[0]+(R.y+R.h-v)/R.h*(g.yr[1]-g.yr[0]);
+      if(zx) this.xr=[xs(Math.min(g.x0,g.x)),xs(Math.max(g.x0,g.x))];
+      if(zy) this.yr=[ys(Math.max(g.y0,g.y)),ys(Math.min(g.y0,g.y))];
+    }
+    this.draw();
+  }
+  wheel(e){
+    if(!this.data) return; e.preventDefault(); const p=this.pt(e), R=this.rect(), f=e.deltaY<0?0.8:1.25;
+    if(e.shiftKey){ const [a,b]=this.yRange(), c=b-(p.y-R.y)/R.h*(b-a); this.yr=[c-(c-a)*f,c+(b-c)*f]; }
+    else{ const [a,b]=this.xRange(), c=a+(p.x-R.x)/R.w*(b-a), na=c-(c-a)*f, nb=c+(b-c)*f, F=this.data.xfull;
+      this.xr=(nb-na>=F[1]-F[0])?null:[na,nb]; }
+    this.draw();
+  }
 }
 
-function drawFFT(k){
-  const cf=SIGVIEWS[k], st=S[k], cv=fitCanvas(document.getElementById(cf.id+'-fft'));
-  const ctx=cv.getContext('2d'),w=cv.width,h=cv.height; ctx.clearRect(0,0,w,h);
-  drawGrid(ctx,w,h);
-  const N=256; const bins=new Float32Array(N);
-  const live = MON[CH_OF[k]];
-  if(!(live && live.spectrum && live.spectrum.length>8)){
-    noData(ctx,w,h); document.getElementById(cf.id+'-pk').textContent='—'; return;
-  }
-  // REAL spectrum from monitoring (raw dB, persistence-smoothed)
-  const s=live.spectrum, M=s.length;
-  for(let i=0;i<N;i++){ const v=s[Math.floor(i*M/N)]; st.fftBg[i]=st.fftBg[i]*0.5+v*0.5; bins[i]=st.fftBg[i]; }
-  updateLiveChips(k, live);
-  // auto-range the y-axis to this frame (so every channel's spectrum fills the graph)
-  let ymin=1e9,ymax=-1e9,pkx=0;
-  for(let i=0;i<N;i++){ if(bins[i]<ymin)ymin=bins[i]; if(bins[i]>ymax){ymax=bins[i];pkx=i;} }
-  // smooth the range across frames to stop it jumping
-  st.ylo = (st.ylo==null)?ymin:st.ylo*0.9+ymin*0.1;
-  st.yhi = (st.yhi==null)?ymax:st.yhi*0.9+ymax*0.1;
-  const lo=st.ylo-3, hi=Math.max(st.yhi+3, lo+6);
-  const Y=v=>h-((v-lo)/(hi-lo))*h;
-  // fill
-  ctx.beginPath(); ctx.moveTo(0,h);
-  for(let i=0;i<N;i++){ ctx.lineTo(w*i/(N-1), Y(bins[i])); }
-  ctx.lineTo(w,h); ctx.closePath(); ctx.fillStyle='rgba(23,105,224,0.10)'; ctx.fill();
-  ctx.beginPath();
-  for(let i=0;i<N;i++){ const x=w*i/(N-1), y=Y(bins[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
-  ctx.strokeStyle=getCSS('--blue'); ctx.lineWidth=1.5; ctx.stroke();
-  // peak marker
-  ctx.fillStyle=getCSS('--red'); ctx.beginPath(); ctx.arc(w*pkx/(N-1),Y(ymax),3,0,7); ctx.fill();
-  document.getElementById(cf.id+'-pk').textContent='peak '+ymax.toFixed(0)+' dB';
+/* ---- data builders (real feed -> graph) ---- */
+function fftData(m,st){
+  const n=m.spectrum.length, fs=m.samp_rate, fc=m.freq_mhz, df=fs/n/1e6, f0=fc-fs/2e6, key=m.band+'|'+fc;
+  let mh=st.mhmap[key];
+  if(!mh||mh.length!==n){ mh=st.mhmap[key]=Float32Array.from(m.spectrum); }
+  else for(let i=0;i<n;i++) if(m.spectrum[i]>mh[i]) mh[i]=m.spectrum[i];
+  let pk=0; for(let i=1;i<n;i++) if(m.spectrum[i]>m.spectrum[pk]) pk=i;
+  const series=[]; if(st.hold) series.push({y:mh,color:'#e02424',ghost:true});
+  series.push({y:m.spectrum,color:'#1769e0'});
+  return {key,n,x:i=>f0+i*df,xfull:[f0,f0+n*df],series,peak:pk,
+    xlabel:'Frequency (MHz)',ylabel:'dBFS per bin',
+    readout:i=>(f0+i*df).toFixed(4)+' MHz · '+m.spectrum[i].toFixed(1)+' dBFS'};
 }
-function drawTime(k){
-  const cf=SIGVIEWS[k], st=S[k], cv=fitCanvas(document.getElementById(cf.id+'-time'));
-  const ctx=cv.getContext('2d'),w=cv.width,h=cv.height; ctx.clearRect(0,0,w,h);
-  drawGrid(ctx,w,h,4,8);
-  const live=MON[CH_OF[k]];
-  if(!(live && live.time && live.time.length>8)){
-    noData(ctx,w,h); document.getElementById(cf.id+'-tv').textContent='—'; return;
-  }
-  // REAL |IQ| envelope (dBFS). Auto-range.
-  const s=live.time, N=s.length; let lo=1e9,hi=-1e9;
-  for(const v of s){ if(v<lo)lo=v; if(v>hi)hi=v; }
-  st.tlo=(st.tlo==null)?lo:st.tlo*0.9+lo*0.1; st.thi=(st.thi==null)?hi:st.thi*0.9+hi*0.1;
-  const a=st.tlo-2,b=Math.max(st.thi+2,a+6), Y=v=>h-((v-a)/(b-a))*h;
-  ctx.beginPath();
-  for(let i=0;i<N;i++){ const x=w*i/(N-1), y=Y(s[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
-  ctx.strokeStyle=getCSS('--blue'); ctx.lineWidth=1.3; ctx.stroke();
-  document.getElementById(cf.id+'-tv').textContent = (live.active?'signal ':'noise ')+hi.toFixed(0)+' dB';
+function timeData(m){
+  const n=m.i.length, dt=1e3/m.samp_rate;
+  return {key:m.band+'|'+m.freq_mhz,n,x:i=>i*dt,xfull:[0,(n-1)*dt],
+    series:[{y:m.i,color:'#1769e0'},{y:m.q,color:'#e02424'}],
+    xlabel:'Time (ms)',ylabel:'Amplitude, full scale = 1  (I blue · Q red)',
+    readout:i=>(i*dt).toFixed(3)+' ms · I '+m.i[i].toFixed(4)+' · Q '+m.q[i].toFixed(4)};
 }
-function drawPolar(k){
-  const cf=SIGVIEWS[k], st=S[k], cv=fitCanvas(document.getElementById(cf.id+'-polar'));
-  const ctx=cv.getContext('2d'),w=cv.width,h=cv.height,cx=w/2,cy=h/2,R=Math.min(w,h)/2-10;
-  ctx.clearRect(0,0,w,h);
-  // rings
-  ctx.strokeStyle=getCSS('--grid'); ctx.lineWidth=1;
-  for(let r=R;r>0;r-=R/3){ ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.stroke(); }
-  ctx.beginPath(); ctx.moveTo(cx-R,cy);ctx.lineTo(cx+R,cy);ctx.moveTo(cx,cy-R);ctx.lineTo(cx,cy+R); ctx.stroke();
-  const live=MON[CH_OF[k]];
-  if(!(live && live.iq && live.iq.length>8)){
-    noData(ctx,w,h); document.getElementById(cf.id+'-pv').textContent='—'; return;
-  }
-  // REAL IQ scatter (I vs Q): noise = centred blob, signal = structure/ring
-  const iq=live.iq;
-  ctx.fillStyle = live.active ? 'rgba(224,36,36,0.55)' : 'rgba(23,105,224,0.45)';
-  for(let n=0;n<iq.length-1;n+=2){ const x=cx+iq[n]*R*0.92, y=cy-iq[n+1]*R*0.92;
-    ctx.beginPath(); ctx.arc(x,y,1.6,0,7); ctx.fill(); }
-  document.getElementById(cf.id+'-pv').textContent = live.active?'signal IQ':'noise IQ';
+function prep(cv){ const w=cv.clientWidth,h=cv.clientHeight; if(w<80||h<80) return null;
+  const dpr=window.devicePixelRatio||1; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,w,h); return {c,w,h}; }
+function ring(c,cx,cy,R,spokes){
+  c.strokeStyle=getCSS('--grid'); c.lineWidth=1;
+  for(let r=R;r>1;r-=R/3){ c.beginPath(); c.arc(cx,cy,r,0,7); c.stroke(); }
+  c.beginPath(); for(let a=0;a<360;a+=spokes){ const t=a*Math.PI/180; c.moveTo(cx,cy); c.lineTo(cx+R*Math.sin(t),cy-R*Math.cos(t)); } c.stroke();
 }
-function noData(ctx,w,h){
-  ctx.fillStyle=getCSS('--muted'); ctx.font='12px sans-serif'; ctx.textAlign='center';
-  ctx.fillText('waiting for this band’s dwell…', w/2, h/2); ctx.textAlign='start';
+// AOA polar plot: there is no AOA / DF stage yet -> the plot stays empty, 0 bearings.
+function drawAOA(cv){
+  const p=prep(cv); if(!p) return; const {c,w,h}=p, cx=w/2, cy=h/2, R=Math.min(w,h)/2-22;
+  ring(c,cx,cy,R,30);
+  c.fillStyle=getCSS('--muted'); c.font='11px sans-serif'; c.textAlign='center'; c.textBaseline='middle';
+  c.fillText('0°',cx,cy-R-10); c.fillText('180°',cx,cy+R+10); c.fillText('90°',cx+R+13,cy); c.fillText('270°',cx-R-14,cy);
+  c.font='12px sans-serif'; c.fillText('no AOA data — DF not built yet',cx,cy+R*0.45);
+  c.fillStyle=getCSS('--ink'); c.beginPath(); c.arc(cx,cy,2.5,0,7); c.fill();
+}
+function drawIQ(cv,m){
+  const p=prep(cv); if(!p) return; const {c,w,h}=p, cx=w/2, cy=h/2, R=Math.min(w,h)/2-22;
+  ring(c,cx,cy,R,90);
+  c.fillStyle=getCSS('--muted'); c.font='11px sans-serif'; c.textAlign='center'; c.textBaseline='middle';
+  c.fillText('I',cx+R+11,cy); c.fillText('Q',cx,cy-R-10);
+  if(!m){ c.fillText('waiting for data…',cx,cy+R*0.5); return; }
+  let mx=1e-6; for(let n=0;n<m.i.length;n++){ mx=Math.max(mx,Math.abs(m.i[n]),Math.abs(m.q[n])); }
+  const sc=R/mx*0.96, step=Math.max(1,Math.floor(m.i.length/1024));
+  c.fillStyle=m.active?'rgba(224,36,36,0.55)':'rgba(23,105,224,0.45)';
+  for(let n=0;n<m.i.length;n+=step){ c.beginPath(); c.arc(cx+m.i[n]*sc,cy-m.q[n]*sc,1.5,0,7); c.fill(); }
+  c.fillStyle=getCSS('--muted'); c.textAlign='left'; c.fillText('outer ring = ±'+mx.toFixed(4)+' FS',6,h-8);
+}
+
+/* ---- per-view wiring ---- */
+for(const k in SIGVIEWS){
+  const cf=SIGVIEWS[k], id=cf.id;
+  const st = S[k] = { lastMsg:null, hold:false, mhmap:{}, rows:[], _lastDet:0,
+    gf:new Graph(document.getElementById(id+'-fft'),{}),
+    gt:new Graph(document.getElementById(id+'-time'),{symmetric:true}),
+    iq:document.getElementById(id+'-iq'), pol:document.getElementById(id+'-polar') };
+  const $=s=>document.getElementById(id+s);
+  $('-fft-auto').onclick=()=>st.gf.autoscale();   $('-fft-reset').onclick=()=>st.gf.reset();
+  $('-fft-hold').onclick=e=>{ st.hold=!st.hold; st.mhmap={}; e.target.classList.toggle('on',st.hold); st.lastMsg=null; };
+  $('-time-auto').onclick=()=>st.gt.autoscale();  $('-time-reset').onclick=()=>st.gt.reset();
+  $('-bandsel').onchange=()=>{ st.lastMsg=null; };
+}
+function updateBandOptions(k){
+  const sel=document.getElementById(SIGVIEWS[k].id+'-bandsel'), seen=LAST[CH_OF[k]];
+  const have=new Set([...sel.options].map(o=>o.value));
+  for(const b in seen){ if(!have.has(b)){ const o=document.createElement('option'); o.value=b; o.textContent=b; sel.appendChild(o); } }
+}
+function viewMsg(k){
+  const sel=document.getElementById(SIGVIEWS[k].id+'-bandsel').value;
+  return sel ? (LAST[CH_OF[k]][sel]||null) : MON[CH_OF[k]];
+}
+function updateChips(k,m){
+  const cf=SIGVIEWS[k], age=(performance.now()-m._rx)/1000;
+  document.getElementById(cf.id+'-band').textContent=m.band||'—';
+  document.getElementById(cf.id+'-cf').textContent=m.freq_mhz.toFixed(m.freq_mhz<1000?3:1)+' MHz';
+  document.getElementById(cf.id+'-span').textContent=(m.samp_rate/1e6).toFixed(2)+' MHz ('+m.nfft+'-pt FFT)';
+  const stat=document.getElementById(cf.id+'-stat'), tag=age>2.5?' · last data '+age.toFixed(1)+' s ago':'';
+  stat.textContent=(m.active?'● ACTIVE ':'● scanning ')+m.rms_dbfs+' dBFS (floor '+m.floor_dbfs+')'+tag;
+  stat.className='chip '+(age>2.5?'warn':(m.active?'bad':'good'));
 }
 
 /* =================== DETECTION TABLES =================== */
 function tickDetections(k){
-  const cf=SIGVIEWS[k], st=S[k];
-  const live=MON[CH_OF[k]];
-  // Real data only: log a detection ONLY when the channel is really active
-  // (real band + freq from the monitoring feed). No feed / not active -> nothing.
-  if(live && live.spectrum && live.spectrum.length>8){
-    if(!live.active) return;
-    if(st._lastDet && (performance.now()-st._lastDet)<1500) return;  // debounce
-    st._lastDet=performance.now();
-    const mhz=live.freq_mhz||0;
-    let cells;
-    if(k==='drone') cells=`<td>${live.band||'—'}</td><td class='r'>${mhz.toFixed(1)}</td><td class='r'>${live.rms_dbfs}</td><td class='r'>—</td><td><span class='pill red'>RF</span></td>`;
-    else if(k==='radar') cells=`<td>${live.band||'—'}</td><td class='r'>—</td><td class='r'>—</td><td>—</td><td><span class='pill'>${mhz.toFixed(0)} MHz</span></td>`;
-    else cells=`<td>${live.band||'—'}</td><td>—</td><td class='r'>${mhz.toFixed(1)}</td><td class='r'>${live.rms_dbfs}</td><td><span class='badge on'>seen</span></td>`;
-    st.rows.unshift({brg:null,cells}); if(st.rows.length>8) st.rows.pop();
-    document.getElementById(cf.id+'-tbody').innerHTML=st.rows.map(r=>`<tr>${r.cells}</tr>`).join('');
-    document.getElementById(cf.id+'-cnt').textContent=st.rows.length;
-  }
-  // no live feed, or not active -> no detection rows (real data only)
+  const cf=SIGVIEWS[k], st=S[k], live=MON[CH_OF[k]];
+  // Real data only: a row is logged ONLY when the band really read above its own floor.
+  if(!(live && live.spectrum && live.spectrum.length>8) || !live.active) return;
+  if(st.lastDetT===live.t) return;
+  if((performance.now()-st._lastDet)<1500) return;
+  st._lastDet=performance.now(); st.lastDetT=live.t;
+  const mhz=live.freq_mhz||0; let cells;
+  if(k==='drone') cells=`<td>${live.band||'—'}</td><td class='r'>${mhz.toFixed(1)}</td><td class='r'>${live.rms_dbfs}</td><td class='r'>—</td><td><span class='pill red'>RF</span></td>`;
+  else if(k==='radar') cells=`<td>${live.band||'—'}</td><td class='r'>—</td><td class='r'>—</td><td>—</td><td><span class='pill'>${mhz.toFixed(0)} MHz</span></td>`;
+  else cells=`<td>${live.band||'—'}</td><td>—</td><td class='r'>${mhz.toFixed(1)}</td><td class='r'>${live.rms_dbfs}</td><td><span class='badge on'>seen</span></td>`;
+  st.rows.unshift({cells}); if(st.rows.length>8) st.rows.pop();
+  document.getElementById(cf.id+'-tbody').innerHTML=st.rows.map(r=>`<tr>${r.cells}</tr>`).join('');
+  document.getElementById(cf.id+'-cnt').textContent=st.rows.length;
 }
 
-/* =================== ANIMATION LOOP (only the active signal view draws) =================== */
-function loop(){
-  if(document.getElementById('runToggle').checked && SIGVIEWS[curView]){
-    const k=curView; S[k].t++;
-    drawFFT(k); drawTime(k); drawPolar(k); tickDetections(k);
+/* =================== LOOP (only the visible signal view draws) =================== */
+let _opt=0;
+function loop(ts){
+  const k=curView;
+  if(SIGVIEWS[k]){
+    const st=S[k], cf=SIGVIEWS[k], run=document.getElementById('runToggle').checked;
+    if(ts-_opt>500){ _opt=ts; updateBandOptions(k); }
+    const m=viewMsg(k);
+    if(run){
+      if(m && m.samp_rate>0){
+        updateChips(k,m);
+        if(m!==st.lastMsg){
+          st.lastMsg=m;
+          const fd=fftData(m,st); st.gf.setData(fd); st.gt.setData(timeData(m)); drawIQ(st.iq,m);
+          document.getElementById(cf.id+'-pk').textContent='peak '+m.spectrum[fd.peak].toFixed(1)+' dBFS @ '+fd.x(fd.peak).toFixed(4)+' MHz';
+          document.getElementById(cf.id+'-tv').textContent='rms '+m.rms_dbfs+' dBFS';
+          document.getElementById(cf.id+'-pv').textContent=m.active?'signal':'noise';
+        }
+        tickDetections(k);
+      }else if(st.lastMsg!==false){
+        st.lastMsg=false; st.gf.data=null; st.gt.data=null; st.gf.blank('waiting for this band’s dwell…'); st.gt.blank('waiting for this band’s dwell…'); drawIQ(st.iq,null);
+        document.getElementById(cf.id+'-stat').textContent='● waiting for data'; document.getElementById(cf.id+'-stat').className='chip';
+      }
+    }
+    if(!st._aoa||ts-st._aoa>1000){ st._aoa=ts; drawAOA(st.pol); }
   }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+window.addEventListener('resize',()=>{ for(const k in S){ S[k].gf.draw(); S[k].gt.draw(); S[k]._aoa=0; S[k].lastMsg=null; } });
 
 /* =================== BACKEND CONFIG VIEW (unchanged logic) =================== */
-function frameMs(ch){ return ch.bands.reduce((s,b)=>s+Number(b.dwell_ms)+Number(CFG.switch_ms),0); }
+function repOf(b){ return Number(b.rep)>0?Number(b.rep):1; }
+function frameMs(ch){ return ch.bands.reduce((s,b)=>s+repOf(b)*(Number(b.dwell_ms)+Number(CFG.switch_ms)),0); }
+function looksOf(ch){ return ch.bands.reduce((s,b)=>s+repOf(b),0); }
 function renderBackend(){
   document.getElementById('switchMs').value = CFG.switch_ms;
   document.getElementById('sampMs').value = (CFG.samp_rate/1e6);
@@ -498,12 +616,13 @@ function renderBackend(){
         <td><input class="nm" style="width:100%" value="${b.name.replace(/"/g,'&quot;')}" data-c="${ci}" data-b="${bi}" data-k="name"></td>
         <td class="r"><input class="f" type="number" step="0.0001" value="${b.freq_mhz}" data-c="${ci}" data-b="${bi}" data-k="freq_mhz"></td>
         <td class="r"><input class="num" type="number" step="1" value="${b.dwell_ms}" data-c="${ci}" data-b="${bi}" data-k="dwell_ms"></td>
+        <td class="r"><input class="num" style="width:56px" type="number" min="1" step="1" value="${repOf(b)}" data-c="${ci}" data-b="${bi}" data-k="rep"></td>
         <td class="r"><button class="x" data-del="${ci}:${bi}">×</button></td>
       </tr>`).join('');
     card.innerHTML=`
-      <div class="chead"><h2>${ch.name}</h2><span class="port">${ch.port} · ${ch.bands.length} bands</span></div>
+      <div class="chead"><h2>${ch.name}</h2><span class="port">${ch.port} · ${ch.bands.length} bands · ${looksOf(ch)} looks</span></div>
       <table>
-        <thead><tr><th>Band</th><th class="r">Freq MHz</th><th class="r">Dwell ms</th><th class="r"></th></tr></thead>
+        <thead><tr><th>Band</th><th class="r">Freq MHz</th><th class="r">Dwell ms</th><th class="r">Cycles</th><th class="r"></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="addrow">
@@ -512,7 +631,7 @@ function renderBackend(){
         <input class="num" type="number" step="1" placeholder="dwell ms" id="ad${ci}">
         <button data-add="${ci}">+ Add band</button>
       </div>
-      <div class="frame">Frame: <b>${(frameMs(ch)/1000).toFixed(2)} s</b> &nbsp;(${ch.bands.length} looks × dwell + ${CFG.switch_ms} ms switch)</div>`;
+      <div class="frame">Frame: <b>${(frameMs(ch)/1000).toFixed(2)} s</b> &nbsp;(${looksOf(ch)} looks, each = dwell + ${CFG.switch_ms} ms switch; Cycles = how often the band repeats in one frame)</div>`;
     wrap.appendChild(card);
   });
   wireBackend();
@@ -533,7 +652,7 @@ function wireBackend(){
     const f=parseFloat(document.getElementById('af'+c).value);
     const d=parseFloat(document.getElementById('ad'+c).value);
     if(!nm||isNaN(f)||isNaN(d)){flash('fill name, MHz and dwell');return;}
-    CFG.channels[c].bands.push({name:nm,freq_mhz:f,dwell_ms:d}); renderBackend();
+    CFG.channels[c].bands.push({name:nm,freq_mhz:f,dwell_ms:d,rep:1}); renderBackend();
   });
 }
 document.getElementById('switchMs').onchange=e=>{CFG.switch_ms=Number(e.target.value);renderBackend();};
@@ -548,7 +667,7 @@ document.getElementById('applyBtn').onclick=()=>flash('Apply: backend control AP
 function flash(m){const s=document.getElementById('status');s.textContent=m;setTimeout(()=>{if(s.textContent===m)s.textContent='';},4000);}
 
 /* =================== INIT =================== */
-renderHW(); renderBackend();
+renderHW(); setInterval(renderHW,1000); renderBackend();
 </script>
 </body>
 </html>

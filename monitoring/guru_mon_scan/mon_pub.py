@@ -24,14 +24,16 @@ from gnuradio import gr
 
 
 class mon_pub(gr.sync_block):
-    def __init__(self, ch, endpoint, publish=True):
+    def __init__(self, ch, endpoint, publish=True, samp_rate=0.0):
         gr.sync_block.__init__(self, name="mon_pub_ch%d" % ch,
                                in_sig=[np.complex64], out_sig=[np.complex64])
         self.ch = ch
         self.publish = publish
+        self.samp_rate = float(samp_rate)   # IQ rate of the payload, in every header (router + UI need it)
         self._lock = threading.Lock()
         self._look = {"ch": ch, "band": "", "freq": 0.0, "look": 0,
-                      "frame": 0, "host_time": time.time()}
+                      "frame": 0, "host_time": time.time(),
+                      "samp_rate": self.samp_rate}
         self._pending_tag = True
         if self.publish:
             self._ctx = zmq.Context.instance()
@@ -49,7 +51,8 @@ class mon_pub(gr.sync_block):
         with self._lock:
             self._look = {"ch": self.ch, "band": str(name), "freq": float(freq),
                           "look": int(look), "frame": int(frame),
-                          "host_time": time.time()}
+                          "host_time": time.time(),
+                          "samp_rate": self.samp_rate}
             self._pending_tag = True
 
     def _tag_dict(self, d):

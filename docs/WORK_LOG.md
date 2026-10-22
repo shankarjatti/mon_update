@@ -17,7 +17,8 @@ decisions taken, and what comes next. Only measured facts; anything not verified
 | **THIS LOG / REPO (user, 2026-10-22)** | **"keep updating on https://github.com/shankarjatti/mon_update always, until I tell you"** → from 2026-10-22 the LIVE log and the monitoring code are updated HERE (`~/radar2/mon_update`, GitHub `mon_update`, PUBLIC, branch `main`). **When (user, same day): "keep updating after every CORRECT result, I will tell you when to stop"** — update after each verified correct result (not after every chat message; an unverified or failed attempt goes in the log only as a failed/open note). Update = edit the lab files → `./sync.sh` → edit this log (entry + CURRENT STATE) → commit → push. Older copy of this log: guru_switch_mon-df (stops at 2026-10-22, has a pointer here). Never publish `main_sched/` (private), recordings, result CSVs, tarballs |
 | **Monitoring (built 2026-10-08…16)** | lab folders `~/radar2/guru_mon_scan` (scanner, scan_plan, pub-sub, UI) + `~/radar2/edge_ch2` (watchdog, UI bridge, CH2 router) + `~/radar2/terrestrial38`, `gr-dsd`, `gr-tetra` (GR 3.8 decoders). 4 channels scan their frames in parallel, own LO each, ZeroMQ PUB 5201–5204, 5-panel UI, activity CSV. Frozen: `guru_mon_scan_v1` / `_v2` (+ `.tar.gz`, `.sha256`), `terrestrial_port_v1.tar.gz` (local). Published here: `monitoring/` (code), `design/` (sim), `docs/`. Details: the 2026-10-08…16 entry and `monitoring/guru_mon_scan/BUILD_LOG.md` |
 | **Run monitoring** | `sudo nmcli connection up usrp` (NIC must be 192.168.10.1/24) → X310 on, 4 antennas → `cd ~/radar2/edge_ch2 && python3 -u run_monitor.py --gain 25 --ch2-gain 10 --samp-rate 1e6 --squelch -45` → UI http://127.0.0.1:8099/securecom_ui.html → stop with ONE Ctrl-C. Checked 2026-10-22 (files, toolchain, modules, ports; hardware not run) |
-| **PENDING EDITS — NOT APPLIED (user, 2026-10-22: "dont edit now, note it down; we check the other channels and I tell all edits at once")** | Apply NOTHING until the user gives the full list. Collected so far: **CH1** — (a) DroneID listen dwell = **2 s = 2000 ms** (code has 2010 → +10 ms switch = 2,010 ms per listen; CH1 frame becomes 14,256 ms, not 14,266); (b) DroneID listen frequency still OPEN (placeholder 2442 MHz); (c) suggested, NOT yet approved: detector uses the peak over the whole dwell. **CH2, CH3, CH4** — not reviewed yet (known: CH3 dwell 160 and CH4 dwell 20 are the sim's look totals, switch counted twice; CH2 gaps listed below) |
+| **CH1 — APPLIED 2026-10-22 ("update all things related to cha 1")** | DroneID listen = 2000 ms dwell (frame 14,256 ms, 47 looks: conventional ×10 [Wi-Fi 2.4 / 5.2 / 5.8 / LoRa SF7] + DroneID ×1 + unconventional ×2 [433 / FPV 1080–1280 / Video 5645–5945]); CH1 UI graphs rebuilt (GNU Radio style); `samp_rate` added to every published header (also fixed the CH2 router rate bug). Details: the 2026-10-22 13:xx entry |
+| **PENDING EDITS — NOT APPLIED (user: "I tell all edits at once")** | **CH1 still open:** DroneID listen FREQUENCY (placeholder 2442 MHz); detector = peak over the whole dwell (suggested, NOT approved; affects every channel). **CH2, CH3, CH4 — not reviewed yet** (known: CH3 dwell 160 and CH4 dwell 20 are the sim's look totals, switch counted twice; CH2 gaps listed below). The UI "Monitoring Backend" copy of CH2–CH4 is still the old saved list |
 | **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) no proof yet of one correct terrestrial decode; (7) **CH2 power is dominated by the DC spur (≈ 100 % within ±3 kHz of DC, −57 dBFS on every band) → floor is the spur**; (8) CH2 console centres ≠ scan plan, saves a .wav per dwell, shows "B210"; (9) UI ACTIVE flag always on (bridge floor bug); (10) load ≈ 10 on 12 cores. See the 2026-10-22 entries (12:0x, 11:5x) |
 | **DF side of the design (`~/radar2/monitoring_sim.html`)** | NOT built: request path, priority scheduler (drone ×5 / others ×2), manual approve, emergency, DF Pub-Sub + AOA. Only the MON↔DF switch itself is proven (guru_switch). Field calibration with real antennas still undecided |
 | Working system | **guru_switch** (`~/radar2/guru_switch`, `./run_hop.sh --switch`): DF (shared LO, 2.4 → 5.2 → 5.8 GHz, 7 ms switching + 5 ms dwell, burst, 2 MS/s) + MON (own LO per channel: ch0 900 MHz, ch1 2.4, ch2 5.2, ch3 5.8 GHz, ONE continuous stream) in one program; mode changed ONLY by hand with the MODE selector (control API off by default) |
@@ -53,6 +54,38 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 ---
 
 ## 2026-10-22
+
+### 2026-10-22 13:xx — user: "update all things related to cha 1" · CH1 UI like GNU Radio graphs, draggable, AOA polar zero, no dummy data · "conventional 10 cycles, 1 DroneID, 2 unconventional" — DONE and VERIFIED on the X310
+* **Scan plan:** `scan_plan.py` DroneID listen 2010 → **2000 ms** (+10 ms switch). Frame now 14,256 ms = 10 × 1,065 + 2,010 + 2 × 798, 47 looks.
+  Cycles as the user states: conventional ×10, DroneID ×1, unconventional ×2 — confirmed in the live stream (28 s ≈ 2 frames: 19–20 looks of each
+  conventional band, 2 DroneID, 4 of each unconventional band).
+* **MEASURED real look length** (samples in the published stream ÷ 1 MS/s, one look = switch + dwell) vs plan: Wi-Fi 2.4 267.8 / 5.2 267.0 /
+  5.8 267.4 ms (plan 266), LoRa 268.7 (267), DroneID 2,012.7 (2,010), 433 267.6 / FPV 267.5 / Video 267.8 (266) → each look runs 1–3 ms longer than
+  plan (host `sleep` + tune call); estimated frame ≈ 14.33 s instead of 14.256 s (+0.5 %). Order inside the frame correct.
+* **ROOT CAUSE of the CH2 decode problem (found while adding the sample rate to the header, fixed, measured):** `mon_pub` headers had no `samp_rate`;
+  `ch2_header_router.py` then assumes 2 MS/s, but the watchdog runs 1 MS/s → decimation 10 instead of 5 → decoder port got IQ at 100 kS/s into a
+  200 kS/s stream: before the fix the P25 port showed real IQ and zero fill alternating every 20 ms during each dwell (`R.R.R.R.`, ≈ 52 % real);
+  after the fix each dwell arrives as one continuous run (`RRRRRRRRRRRRRRRRR`, 17–23 ticks per 450 ms dwell). Fix: `mon_pub.py` / `mon_server.py`
+  put `samp_rate` in every header. Decode itself still NOT re-tested with a keyed radio.
+* **UI (`securecom_ui.html`, all four signal panels share the code; verified in the built-in browser, 0 console errors):** frequency and time
+  graphs with axes and units (MHz, dBFS, ms, full-scale amplitude), GNU Radio behaviour: drag = zoom box, wheel = scale (shift = y), shift+drag = pan,
+  double-click / Reset zoom, Autoscale, Max hold, cursor readout, "zoomed" marker; time plot shows real I (blue) and Q (red); AOA polar plot is
+  empty ("0 bearings", "no AOA data — DF not built yet"); IQ scatter kept as a separate real-data panel; "Show band" filter learns the band
+  names from the live feed (replaces the fake Scan / Pin buttons). CH1 subtitle fixed A/RX2 → A/RX1.
+* **Dummy data removed:** the hardware chips (LO lock all green, Overflow "no", CPU "performance", Link "1 Gb/s") were hard-coded placeholders —
+  replaced by live facts only (feed connected, CH1–CH4 live / no data from message age, sample rate from the header, Mode MON) plus the note
+  "LO lock · overflow · CPU: not reported by the backend yet". The "Monitoring Backend" tab is labelled as a saved editable copy that does not
+  control the scanner; its CH1 list now matches the plan (with a Cycles column), CH2–CH4 values are still the old copy.
+* **Bridge (`mon_ws_bridge.py`) rewritten:** per-look buffer, first 12 ms (switch) dropped, ≥ 4096 settled samples before a push, 1024-point FFT
+  averaged over up to 8192 samples (dBFS, full-scale tone = 0 dBFS), 2048 raw I/Q samples, per-band floor = lowest rms seen (the old floor started at
+  −120 dBFS and never rose → every channel showed ACTIVE all the time; fixed). The watchdog restarted the bridge by itself after I killed it (20 s).
+* **New finding (visible in the new time plot):** CH1 raw IQ has a large DC offset — I ≈ −0.2, Q ≈ −0.4, a spur exactly at the centre frequency
+  ≈ −6 dBFS, ≈ 40 dB above the noise, on every CH1 band (same DC-spur problem as CH2). `set_dc_offset(True)` does not remove it. Not fixed.
+* **Tool note:** the Claude-in-Chrome extension is not connected; I checked the UI in the built-in browser pane (the user's Chrome has the page open
+  via `xdg-open`; hard-reload it with Ctrl+Shift+R — the old page is cached). The synthetic drag of the test tool left the zoom box on screen; real mouse
+  events (dispatched from the page) zoomed and finished correctly.
+* **Not done / open:** DroneID listen frequency; detector still reads only the end of each dwell (not approved); DC offset; CH2–CH4 review; a long run
+  (load average was ≈ 8–10 before this restart, not re-measured).
 
 ### 2026-10-22 12:3x — user: CH1 first — bands, dwell, frame and cycles explained with a block diagram; "for DroneID set 2 sec, and don't edit now, note it down; we check the other channels and I tell all edits at once"
 * Read from `scan_plan.py` (nothing run, nothing edited): CH1 = ch0 A/RX1, 47 looks per frame, each look = 10 ms switch + dwell

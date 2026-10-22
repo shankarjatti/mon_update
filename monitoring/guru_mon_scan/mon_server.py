@@ -112,7 +112,8 @@ class mon_server(gr.top_block):
         self.pub = []
         self.probes = []
         for ch in range(NCH):
-            p = mon_pub(ch, "tcp://127.0.0.1:%d" % (BASE_PORT + ch), publish=publish)
+            p = mon_pub(ch, "tcp://127.0.0.1:%d" % (BASE_PORT + ch), publish=publish,
+                        samp_rate=samp_rate)
             mag2 = blocks.complex_to_mag_squared(1)
             avg = blocks.moving_average_ff(2000, 1.0 / 2000, 8000)
             pr = blocks.probe_signal_f()
