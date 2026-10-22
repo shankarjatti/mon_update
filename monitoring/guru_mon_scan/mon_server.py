@@ -52,6 +52,11 @@ CH2 = 1                      # 0-indexed terrestrial channel
 DET_PORT = 5210                # detections (one JSON per dwell) -> UI bridge / edge modules
 SETTLE_S = 0.014               # detector ignores the first 14 ms of each look (10 ms switch + retune transient, measured,
                                # + 2 ms because look tags sit on 2048-sample chunk boundaries)
+# CH2: real signals last >= 14 ms (TETRA slot), 27.5 ms (DMR burst), 26.7 ms (AIS) or are continuous (P25 / NXDN /
+# D-STAR); measured 2026-10-22: CH2 shows 0.5-1 ms broadband pulses at 0 Hz (DC jumps through the DC filter) on every
+# band -> the power rule on CH2 uses the level held for >= 5 ms in the look, not the single peak window.
+# ADS-B (120 us pulses) keeps the peak. Other channels keep the peak (CH1 Wi-Fi beacons are 0.3-2.6 ms).
+CH2_SUSTAIN_S = 0.005
 NB_MARGIN_DB = 10.0            # narrowband: a spectral line >= 10 dB over the median bin = ACTIVE (2048-pt, >= 3 segments)
 WIN_S = 0.0005                 # detector power window 0.5 ms; ACTIVE uses the peak window of the look
 ACTIVE_MARGIN_DB = 2.5       # a band reads "active" at its own floor + 2.5 dB. Measured 2026-10-22: with DC removed, noise-only
@@ -147,7 +152,8 @@ class mon_server(gr.top_block):
             p = mon_pub(ch, "tcp://127.0.0.1:%d" % (BASE_PORT + ch), publish=publish,
                         samp_rate=rate)
             pr = look_power(rate, settle_s=SETTLE_S, win_s=WIN_S,
-                            nfft=2048 if rate >= 1e6 else 512)       # sample-accurate per-look power + lines
+                            nfft=2048 if rate >= 1e6 else 512,        # sample-accurate per-look power + lines
+                            nb_pct=80 if ch == CH2 else None)         # CH2: a line must hold in >= 20 % of the look
             if self.dc_alpha > 0:
                 dcsub = blocks.sub_cc(1)
                 dclp = filter.single_pole_iir_filter_cc(self.dc_alpha)
@@ -279,6 +285,9 @@ class mon_server(gr.top_block):
             key, pk, _mean, nset = self.probes[ch].stats()
             if key == lk and pk is not None:
                 db = pk
+                if ch == CH2 and "ADS-B" not in name:
+                    sv = self.probes[ch].sustained(CH2_SUSTAIN_S)
+                    db = sv if sv is not None else pk
                 break
             time.sleep(0.001)
         if ch == CH2 and getattr(self, "_dbg_timing", False):
@@ -293,7 +302,13 @@ class mon_server(gr.top_block):
                 fl = db
             nb = self.probes[ch].nb()               # strongest narrowband line of THIS look (real spectrum)
             nb_on = nb is not None and nb[0] >= NB_MARGIN_DB
-            if db > fl + ACTIVE_MARGIN_DB or nb_on:
+            power_on = db > fl + ACTIVE_MARGIN_DB
+            # CH2 narrowband protocols (DMR / P25 / NXDN / TETRA / D-STAR / AIS: 6.25-25 kHz channels) are
+            # ACTIVE only with a real narrow line; broadband energy cannot be them (measured 2026-10-22:
+            # broadband pulses / rises on P25 / NXDN / TETRA with a flat spectrum). ADS-B keeps the power rule.
+            if ch == CH2 and "ADS-B" not in name:
+                power_on = False
+            if power_on or nb_on:
                 active = True
                 print("[ACTIVE] %s %-18s %.4f MHz  %6.1f dBFS  (floor %6.1f)%s"
                       % (CH_NAME[ch][:3], name, freq / 1e6, db, fl,
@@ -313,7 +328,7 @@ class mon_server(gr.top_block):
                         "nb_db": None if nb is None else round(nb[0], 1),
                         "nb_mhz": None if nb is None else round((freq + nb[1]) / 1e6, 6),
                         "nb_dbfs": None if nb is None else round(nb[2], 1),
-                        "nb_active": bool(nb_on), "power_active": bool(db > fl + ACTIVE_MARGIN_DB),
+                        "nb_active": bool(nb_on), "power_active": bool(power_on),
                         "dwell_ms": float(dwell_ms), "t": time.time()}), flags=zmq.NOBLOCK)
                 except Exception:
                     pass

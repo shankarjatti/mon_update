@@ -55,6 +55,19 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 20:3x — user (keying a DMR radio, 446.0–446.2 MHz): "why is it detected in NXDN and P25? it should not" — FIXED, VERIFIED
+* MEASURED (32 s, radio keyed): every P25 / NXDN / TETRA hit was a 0.5–1 ms broadband pulse at 0 Hz (110–190 kHz wide) — the CH2 artefact seen
+  all day (DC jumps through the DC filter), not the DMR signal (which is 27.5 ms bursts, 12.5 kHz wide, at 446.107 MHz).
+* Fix 1: CH2 power rule uses the level held for ≥ 5 ms in the look (`look_power.sustained`), not the single 0.5 ms peak (real CH2 signals:
+  TETRA slot 14 ms, DMR burst 27.5 ms, AIS 26.7 ms, P25 / NXDN / D-STAR continuous); CH2 line test uses the 80th-percentile spectrum
+  over the look's segments (a 1 ms pulse is in 1 of ~170 segments). → 60 s with DMR keyed: DMR ACTIVE 161 (line 446.1070 MHz +44…47 dB),
+  NXDN 0, TETRA 0, P25 1 (pulses still present in the raw data: P25 11, NXDN 5, TETRA 4 looks).
+* Then (80 s) broadband rises HELD ≥ 5 ms appeared on P25 / NXDN / TETRA (+9…+47 dB, flat spectrum, no line) — and did not occur in the next
+  70 s with DMR keyed (0 of 120 looks) → not caused by the DMR signal; cause unknown (open).
+* Fix 2: CH2 narrowband protocols (DMR / P25 / NXDN / TETRA / D-STAR / AIS) are ACTIVE only with a real narrow line (≥ 10 dB over the median
+  bin, 80th-percentile spectrum); ADS-B keeps the power rule. → 75 s: DMR ACTIVE 79 (lines 446.1191…446.1195 MHz, +30…+39 dB), P25 0 / 63,
+  NXDN 0 / 63, TETRA 0 / 62.
+
 ### 2026-10-22 20:xx — user: "80 MHz per band — not needed now, leave it; move to CH2" · "in CH2 for each frequency set bandwidth 200 kHz" — DONE, VERIFIED
 * 80 MHz looks: answered (needs ≥ 100 MS/s per channel: 10 GbE SFP+ NIC + XG image + C++ processing; today's link 1 Gb/s, RTL8125 at
   1000 Mb/s) — user: not now.

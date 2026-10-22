@@ -26,7 +26,7 @@ from gnuradio import gr
 
 
 class look_power(gr.sync_block):
-    def __init__(self, samp_rate, settle_s=0.012, win_s=0.0005, nfft=2048, dc_guard_hz=2000.0):
+    def __init__(self, samp_rate, settle_s=0.012, win_s=0.0005, nfft=2048, dc_guard_hz=2000.0, nb_pct=None):
         gr.sync_block.__init__(self, name="look_power",
                                in_sig=[np.complex64], out_sig=None)
         self.settle = int(settle_s * samp_rate)
@@ -38,6 +38,7 @@ class look_power(gr.sync_block):
         f = (np.arange(self.nfft) - self.nfft // 2) * self.fs / self.nfft
         self._f = f
         self._use = np.abs(f) > dc_guard_hz                      # bins outside the DC guard
+        self.nb_pct = nb_pct      # None: mean spectrum; e.g. 80: level each bin holds in >= 20 % of the segments (pulses ignored)
         self._lock = threading.Lock()
         self._key = None
         self._reset()
@@ -50,9 +51,11 @@ class look_power(gr.sync_block):
         self._sum = 0.0      # total power (settled part)
         self._n = 0          # settled samples
         self._nwin = 0       # complete windows
+        self._wins = []      # mean power of every complete window (for the sustained level)
         self._spec = np.zeros(self.nfft)   # summed |FFT|^2 (Hann) of the settled samples
         self._nseg = 0
         self._sbuf = np.zeros(0, np.complex64)
+        self._segs = []
 
     def _feed(self, x):
         if self._skip:
@@ -66,7 +69,10 @@ class look_power(gr.sync_block):
         k2 = sb.size // self.nfft
         if k2:
             segs = sb[:k2 * self.nfft].reshape(k2, self.nfft) * self._win
-            self._spec += (np.abs(np.fft.fft(segs, axis=1)) ** 2).sum(axis=0)
+            ps = np.abs(np.fft.fft(segs, axis=1)) ** 2
+            self._spec += ps.sum(axis=0)
+            if self.nb_pct is not None:
+                self._segs.extend(ps)
             self._nseg += k2
         self._sbuf = sb[k2 * self.nfft:].copy()
         p = x.real.astype(np.float64) ** 2 + x.imag.astype(np.float64) ** 2
@@ -80,6 +86,7 @@ class look_power(gr.sync_block):
             i = take
             if self._accn == self.W:
                 self._peak = max(self._peak, self._acc / self.W)
+                self._wins.append(self._acc / self.W)
                 self._nwin += 1
                 self._acc, self._accn = 0.0, 0
         rest = p[i:]
@@ -87,6 +94,7 @@ class look_power(gr.sync_block):
         if k:
             wm = rest[:k * self.W].reshape(k, self.W).mean(axis=1)
             self._peak = max(self._peak, float(wm.max()))
+            self._wins.extend(wm.tolist())
             self._nwin += k
         r = rest[k * self.W:]
         if len(r):
@@ -118,7 +126,10 @@ class look_power(gr.sync_block):
         with self._lock:
             if self._nseg < 3:
                 return None
-            s = np.fft.fftshift(self._spec) / self._nseg
+            if self.nb_pct is not None and len(self._segs) >= 3:
+                s = np.fft.fftshift(np.percentile(np.vstack(self._segs), self.nb_pct, axis=0))
+            else:
+                s = np.fft.fftshift(self._spec) / self._nseg
             u = s[self._use]
             j = int(np.argmax(u))
             med = float(np.median(u))
@@ -126,6 +137,18 @@ class look_power(gr.sync_block):
             f = float(self._f[self._use][j])
             return (10.0 * np.log10(pk / max(med, 1e-30)), f,
                     10.0 * np.log10(pk / (self._win.sum() ** 2) + 1e-30), self._nseg)
+
+    def sustained(self, min_s):
+        """Level (dBFS) reached by at least min_s of the look's windows in total: the K-th largest window,
+        K = min_s / win. A pulse shorter than min_s cannot raise it; a real burst / call longer than min_s does."""
+        with self._lock:
+            if not self._wins:
+                return None
+            k = max(1, int(round(min_s * self.fs / self.W)))
+            if k > len(self._wins):
+                return None
+            v = np.partition(np.asarray(self._wins), len(self._wins) - k)[len(self._wins) - k]
+            return 10.0 * np.log10(v + 1e-15)
 
     def stats(self):
         """(look key = host_time of its set_look, peak dB, mean dB, settled samples)."""
