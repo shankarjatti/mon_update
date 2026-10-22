@@ -55,6 +55,10 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 18:1x — user: "in the polar plot no need to mention DF not built yet; if real data comes show it, if not don't show" — DONE
+* AOA polar plot: the "no AOA data — DF not built yet" text removed; it shows only the empty polar grid, and bearings are drawn only when
+  real AOA data arrives (no AOA source exists yet). Checked in the browser, 0 console errors.
+
 ### 2026-10-22 18:0x — user: "now remove that constellation plot also from CH1" — DONE, checked
 * CH1 view: constellation sink removed (CH3 / CH4 panels keep theirs until those channels are reviewed). CH1 one-frame layout now: Frequency +
   Time on the left, AOA polar over the full right column, Detections row at the bottom. Reset layout uses the page's own default order.

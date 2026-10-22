@@ -670,12 +670,12 @@ function drawWF(cv,st,m,key){
 function ring(c,cx,cy,R,spokes){ c.strokeStyle='#c8c8c8'; c.lineWidth=1;
   for(let r=R;r>1;r-=R/3){ c.beginPath(); c.arc(cx,cy,r,0,7); c.stroke(); }
   c.beginPath(); for(let a=0;a<360;a+=spokes){ const t=a*Math.PI/180; c.moveTo(cx,cy); c.lineTo(cx+R*Math.sin(t),cy-R*Math.cos(t)); } c.stroke(); }
-// AOA polar plot: there is no AOA / DF stage yet -> empty, 0 bearings.
+// AOA polar plot: draws real bearings only; no AOA data -> just the empty polar grid (no text).
 function drawAOA(cv){ const g=grSize(cv); if(!g) return; const {c,w,h}=g, cx=w/2, cy=h/2, R=Math.max(20,Math.min(w-100,h-56)/2);
   c.fillStyle=GR.bg; c.fillRect(0,0,w,h); c.fillStyle=GR.canvas; c.beginPath(); c.arc(cx,cy,R,0,7); c.fill(); ring(c,cx,cy,R,30);
   c.fillStyle=GR.ink; c.font='13px '+GRF; c.textAlign='center'; c.textBaseline='middle';
   c.fillText('0°',cx,cy-R-12); c.fillText('180°',cx,cy+R+12); c.fillText('90°',cx+R+16,cy); c.fillText('270°',cx-R-18,cy);
-  c.fillStyle='#555'; c.fillText('no AOA data — DF not built yet',cx,cy+R*0.45); c.fillStyle=GR.ink; c.beginPath(); c.arc(cx,cy,2.5,0,7); c.fill(); }
+  c.fillStyle=GR.ink; c.beginPath(); c.arc(cx,cy,2.5,0,7); c.fill(); }   // bearings are drawn only when real AOA data arrives (none yet)
 
 /* ---- band list (from the real scan plan) and the band lock ---- */
 function fillBandList(k){
