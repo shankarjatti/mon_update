@@ -17,7 +17,7 @@ decisions taken, and what comes next. Only measured facts; anything not verified
 | **THIS LOG / REPO (user, 2026-10-22)** | **"keep updating on https://github.com/shankarjatti/mon_update always, until I tell you"** → from 2026-10-22 the LIVE log and the monitoring code are updated HERE (`~/radar2/mon_update`, GitHub `mon_update`, PUBLIC, branch `main`). **When (user, same day): "keep updating after every CORRECT result, I will tell you when to stop"** — update after each verified correct result (not after every chat message; an unverified or failed attempt goes in the log only as a failed/open note). Update = edit the lab files → `./sync.sh` → edit this log (entry + CURRENT STATE) → commit → push. Older copy of this log: guru_switch_mon-df (stops at 2026-10-22, has a pointer here). Never publish `main_sched/` (private), recordings, result CSVs, tarballs |
 | **Monitoring (built 2026-10-08…16)** | lab folders `~/radar2/guru_mon_scan` (scanner, scan_plan, pub-sub, UI) + `~/radar2/edge_ch2` (watchdog, UI bridge, CH2 router) + `~/radar2/terrestrial38`, `gr-dsd`, `gr-tetra` (GR 3.8 decoders). 4 channels scan their frames in parallel, own LO each, ZeroMQ PUB 5201–5204, 5-panel UI, activity CSV. Frozen: `guru_mon_scan_v1` / `_v2` (+ `.tar.gz`, `.sha256`), `terrestrial_port_v1.tar.gz` (local). Published here: `monitoring/` (code), `design/` (sim), `docs/`. Details: the 2026-10-08…16 entry and `monitoring/guru_mon_scan/BUILD_LOG.md` |
 | **Run monitoring** | `sudo nmcli connection up usrp` (NIC must be 192.168.10.1/24) → X310 on, 4 antennas → `cd ~/radar2/edge_ch2 && python3 -u run_monitor.py --gain 25 --ch2-gain 10 --samp-rate 1e6 --squelch -45` → UI http://127.0.0.1:8099/securecom_ui.html → stop with ONE Ctrl-C. Checked 2026-10-22 (files, toolchain, modules, ports; hardware not run) |
-| **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) no proof yet of one correct terrestrial decode. See the 2026-10-22 entry |
+| **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) no proof yet of one correct terrestrial decode; (7) **CH2 power is dominated by the DC spur (≈ 100 % within ±3 kHz of DC, −57 dBFS on every band) → floor is the spur**; (8) CH2 console centres ≠ scan plan, saves a .wav per dwell, shows "B210"; (9) UI ACTIVE flag always on (bridge floor bug); (10) load ≈ 10 on 12 cores. See the 2026-10-22 entries (12:0x, 11:5x) |
 | **DF side of the design (`~/radar2/monitoring_sim.html`)** | NOT built: request path, priority scheduler (drone ×5 / others ×2), manual approve, emergency, DF Pub-Sub + AOA. Only the MON↔DF switch itself is proven (guru_switch). Field calibration with real antennas still undecided |
 | Working system | **guru_switch** (`~/radar2/guru_switch`, `./run_hop.sh --switch`): DF (shared LO, 2.4 → 5.2 → 5.8 GHz, 7 ms switching + 5 ms dwell, burst, 2 MS/s) + MON (own LO per channel: ch0 900 MHz, ch1 2.4, ch2 5.2, ch3 5.8 GHz, ONE continuous stream) in one program; mode changed ONLY by hand with the MODE selector (control API off by default) |
 | Proven | DF phase after returning from MON ≤ 0.33° (same as a plain retune); switch ~20–33 ms request → first dwell; 30-min run 2026-09-30 18:12–18:42: 0 TIMING LOST, 0 errors, HackRF 0 stalls |
@@ -52,6 +52,34 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 ---
 
 ## 2026-10-22
+
+### 2026-10-22 12:0x — user: "check channel 2 not working correctly" — CH2 DIAGNOSIS (measured on the running system, nothing changed)
+* **Data flow and timing are correct.** 10 s tap of ports 5201–5204: every channel 1.000 MS/s, blocks of 364 samples
+  (≈ 2,400 msgs/s/channel), no gaps. CH2 samples per band in 10 s match the plan within ≈ 5–10 % (P25 4.16 M, NXDN
+  1.90 M, DMR 1.36 M, TETRA 1.23 M, D-STAR 0.53 M, AIS 0.41 M, ADS-B 0.41 M; plan 450/200/150/142/50/400/400 ms per cycle).
+* **Found 1 — DC spur dominates every CH2 look.** Raw IQ per dwell (60 s, first 15 ms of each dwell dropped, 1 MS/s):
+  in ALL 7 CH2 bands ≈ 100 % of the power sits within ±3 kHz of DC, the spectrum peak is exactly 0.0 kHz and 47–49 dB over
+  the median, and the wideband level reads the same −57.3 dBFS on every band (145 MHz … 1090 MHz) → **the CH2 "floor" is the
+  DC / LO spur, not thermal noise**. Strongest non-DC peak only 1–9 dB over the median; 0 loud dwells (rms > −45 dBFS) in
+  the 60 s window. So: weak real signals sit below the spur and cannot trigger "ACTIVE" (floor + 8 dB), and the console's
+  "P25 carrier at +0.00 kHz, +30 dB SNR, no decoded audio" is this spur, not a radio. `set_dc_offset(True)` in
+  `mon_server.py` does not remove it.
+* **Found 2 — real events do happen:** 11:53–11:55 the scanner logged DMR 446.100 / NXDN 451.0 / P25 450.0 up to −19 dBFS,
+  rising together over ≈ 6 s, and D-STAR 145.0 once at −3.6 dBFS. Whether these were hand-radios or broadband leakage was
+  NOT separated (nothing was keyed during the 60 s IQ capture). Open.
+* **Found 3 — the CH2 console (`securecom_gui.html`, old backupv1 code) does not match the scan plan:** its band centres are
+  DMR 446.11853 / NXDN 451.09375 / P25 450.09375 / TETRA 420.0 MHz, the radio is tuned to 446.100 / 451.0 / 450.0 / 420.0
+  (offsets 18.5 / 93.75 / 93.75 kHz) — whether the router re-centres the IQ is not shown in `ch2_header_router.py` (no shift found).
+  The console also says "USRP · B210 · RUNNING" (the radio is the X310), and it saves a `.wav` for EVERY dwell ("saved
+  dmr_… 0.7 s, dwell captured") even when nothing is on air → the thousands of recordings are mostly empty/false.
+* **Found 4 — decoder taps:** DMR / NXDN / P25 audio taps stream 48 kHz continuously (silence); TETRA tap 0 messages in 5 s
+  (not shown whether that is normal when idle). `allinone.py` start-up prints are static (not a restart loop).
+  `backupv1_bridge.log` fills with `InvalidMessage: did not receive a valid HTTP request` (130×) = the watchdog's plain TCP
+  port probe, harmless noise.
+* **Load:** `mon_server` 126 %, `mon_ws_bridge` 86 %, `allinone` 72 %, router 51 %; load average 3.3 → 6.5 → 10 within 6 min on
+  12 cores (the bridge handles every 364-sample message separately; likely cause of the earlier "getting stuck").
+* **UI labels:** CH1 panel subtitle says "A/RX2" (CH1 is A/RX1). UI "ACTIVE" is always on (bridge floor bug, see the 11:5x entry).
+* Not done / next: waiting for the user — channel-by-channel dwell setup was requested right after this diagnosis.
 
 ### 2026-10-22 11:5x — user: "RUN THAT monitoring work and show me UI result … in chrome … I have connected 2945" — RAN ON THE X310: OK
 * Before: NIC `enp3s0` = 192.168.10.1/24 (profile `usrp` active), X310 ping 0.63 ms, ports free.
