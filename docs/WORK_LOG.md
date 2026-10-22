@@ -55,6 +55,15 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 19:5x — user (screenshot, generator raised): "make the frequency and time scale less" — DONE, checked
+* User raised the generator: CH1 (gain 65 dB, locked on Wi-Fi 5.8) now shows the tone ACTIVE by band power AND line: status
+  "peak −7.5 dBFS (floor −20.1) · line 5785.002441 MHz +42 dB"; detections "line +42.5 dB · power +12.6 dB".
+* Frequency Sink: "Span" selector in its title bar (1 MHz, 500, 200, 100, 50, 20, 10 kHz), centred on the tuned frequency, default 200 kHz
+  (checked: view 5784.9 … 5785.1 MHz). Time Sink: "Window" selector (4096 … 64 µs), default 512 µs (the 2.4 kHz offset tone shows as a sine).
+  X Max ± in the control panel stays in step with it.
+* Bug fixed: zooming out could show axes beyond the real data (the user's plot showed −1,000 … 3,000 µs); zoom-out now stops at the data range
+  (checked: 12 zoom-outs → 0 … 511 µs). 0 console errors.
+
 ### 2026-10-22 19:xx — user: "I should see a good proper real signal … tell me the TX gain … do real changes, no fake signals" — narrowband detector BUILT, VERIFIED with the user's generator
 * `look_power.py` now also averages a 2048-point Hann power spectrum over the settled part of each look (sample-accurate, real samples);
   `nb()` = strongest line outside ±2 kHz of 0 Hz, in dB over the MEDIAN bin, its frequency and level (needs ≥ 3 segments).

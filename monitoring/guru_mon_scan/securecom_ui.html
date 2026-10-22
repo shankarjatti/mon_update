@@ -102,6 +102,9 @@
   /* GNU Radio 3.8 QT GUI sink look (copied from the real sinks rendered on this PC) */
   .grsink{background:#efefef;border:1px solid #c9c9c9;border-radius:4px;margin-top:12px;padding:6px 6px 8px;font-family:"DejaVu Sans","Bitstream Vera Sans",Verdana,sans-serif;color:#000}
   .grtitle{font-size:13px;font-weight:bold;margin:0 0 4px 2px;display:flex;align-items:center;gap:6px}
+  label.grq{margin-left:auto;font-size:12px;font-weight:normal;color:#000;display:flex;align-items:center;gap:4px}
+  label.grq select{font-size:12px;padding:1px 4px}
+  label.grq+button.grcp{margin-left:6px}
   button.grcp{margin-left:auto;font-size:12px;font-weight:normal;padding:2px 10px;background:#f7f7f7;border:1px solid #b5b5b5;border-radius:3px;color:#000}
   button.grcp.on{background:#d6e4f7;border-color:#7a9fd6}
   .grtitle b{font-weight:normal;color:#333;font-size:12px}
@@ -263,7 +266,7 @@ function signalViewHTML(cfg){
     <div class="chips">${cfg.gainCtl?`<label>RX gain <input class="num" id="${id}-gain" type="number" min="0" max="99" step="1" style="width:64px"> dB</label><button id="${id}-gainset">Set gain</button><span class="chip" id="${id}-gainstat" title="gain the radio is really using (reported by the scanner with every detection verdict)">applied —</span>`:''}${lock}<button id="${id}-relayout" title="put the plots back in their default places">Reset layout</button></div>
   </div>
   <div class="grgrid${cfg.noConst?' noconst':''}" id="${id}-grid">
-    <div class="grslot" data-slot="1"><div class="grsink" id="${id}-tile-f"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Frequency Sink <b id="${id}-pk"></b><button class="grcp" id="${id}-cp-f" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
+    <div class="grslot" data-slot="1"><div class="grsink" id="${id}-tile-f"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Frequency Sink <b id="${id}-pk"></b><label class="grq">Span <select id="${id}-fspan">${[[1e6,"1 MHz"],[5e5,"500 kHz"],[2e5,"200 kHz"],[1e5,"100 kHz"],[5e4,"50 kHz"],[2e4,"20 kHz"],[1e4,"10 kHz"]].map(o=>`<option value="${o[0]}" ${o[0]==2e5?"selected":""}>${o[1]}</option>`).join("")}</select></label><button class="grcp" id="${id}-cp-f" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
     <div class="grplot"><canvas id="${id}-fft" class="grcv"></canvas></div>
     <div class="grpanel" id="${id}-pan-f" style="display:none">
       ${grp('Trace Options', cb('fmax','Max Hold',false)+cb('fmin','Min Hold',false)+`<div class="grrow"><span>Avg:</span><input type="range" class="grslider" id="${id}-favg" min="1" max="100" value="100"></div>`)}
@@ -272,7 +275,7 @@ function signalViewHTML(cfg){
       ${grp('Trigger', sel('ftm',[['free','Free'],['auto','Auto'],['normal','Normal']],'free')+pm('flev','Level'))}
       ${grp('Extras', btn('fstop','Stop')+btn('fpng','Save Image')+btn('fcsv','Export CSV'))}
     </div></div></div></div>
-    <div class="grslot" data-slot="2"><div class="grsink" id="${id}-tile-t"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Time Sink <b id="${id}-tv"></b><button class="grcp" id="${id}-cp-t" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
+    <div class="grslot" data-slot="2"><div class="grsink" id="${id}-tile-t"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Time Sink <b id="${id}-tv"></b><label class="grq">Window <select id="${id}-twin">${[4096,2048,1024,512,256,128,64].map(n=>`<option value="${n}" ${n==512?"selected":""}>${n} µs</option>`).join("")}</select></label><button class="grcp" id="${id}-cp-t" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
     <div class="grplot"><canvas id="${id}-time" class="grcv"></canvas></div>
     <div class="grpanel" id="${id}-pan-t" style="display:none">
       ${grp('Axes', cb('tauto','Autoscale',false)+cb('tgrid','Grid',false)+cb('tax','Axis Labels',true)+pm('tyo','Y Offset')+pm('tyr','Y Range')+pm('txm','X Max'))}
@@ -524,7 +527,7 @@ class GRPlot{
   }
   view(){ const d=this.data, z=this.zoom[this.zoom.length-1];
     if(!z && this.autoY && d.xs){ const a=this.auto(true); return {xr:a,yr:a}; }   // constellation autoscale: both axes
-    const xr=z?z.x:(this.xlim||d.xfull); let yr;
+    const xr=z?z.x:(this.xlim||d.xview||d.xfull); let yr;
     if(z) yr=z.y; else if(this.autoY) yr=this.auto(true); else yr=this.ylim;
     return {xr,yr}; }
   auto(smooth){ const d=this.data; let lo=Infinity,hi=-Infinity;
@@ -580,7 +583,8 @@ class GRPlot{
     this.draw(); }
   wheel(e){ if(!this.data||!this._R) return; e.preventDefault(); const p=this.pt(e), R=this._R, f=e.deltaY<0?0.8:1.25, {xr,yr}=this.view(), z={x:xr.slice(),y:yr.slice()};
     if(e.shiftKey){ const c0=yr[1]-(p.y-R.y)/R.h*(yr[1]-yr[0]); z.y=[c0-(c0-yr[0])*f,c0+(yr[1]-c0)*f]; }
-    else { const c0=xr[0]+(p.x-R.x)/R.w*(xr[1]-xr[0]); z.x=[c0-(c0-xr[0])*f,c0+(xr[1]-c0)*f]; }
+    else { const c0=xr[0]+(p.x-R.x)/R.w*(xr[1]-xr[0]); z.x=[c0-(c0-xr[0])*f,c0+(xr[1]-c0)*f];
+      if(!this.data.xs){ const F=this.data.xfull, W=F[1]-F[0]; if(z.x[1]-z.x[0]>=W) z.x=F.slice(); else { if(z.x[0]<F[0]) z.x=[F[0],F[0]+(z.x[1]-z.x[0])]; if(z.x[1]>F[1]) z.x=[F[1]-(z.x[1]-z.x[0]),F[1]]; } } }
     if(this.zoom.length) this.zoom[this.zoom.length-1]=z; else this.zoom.push(z); this.draw(); }
   png(name){ download(name+'_'+stamp()+'.png', this.cv.toDataURL('image/png')); }
   csv(name){ const d=this.data; if(!d) return; const rows=[];
@@ -604,7 +608,8 @@ function fftData(m,st){
   if(st.fmax) series.push({y:b.max,color:'#00c8ff',ghost:true,label:'max_hold_dB'});
   if(st.fmin) series.push({y:b.min,color:'#00a000',ghost:true,label:'min_hold_dB'});
   series.push({y,color:GR.c0,label:'dB'});
-  return {key:m.band+'|'+fc,n,x:i=>f0+i*df,xfull:[f0,f0+n*df],series,y,pk,legend:[{label:'Data 0',color:GR.c0}],
+  const sp=Math.min(st.fspan||fs,fs)/2e6;
+  return {key:m.band+'|'+fc+'|'+st.fspan,n,x:i=>f0+i*df,xfull:[f0,f0+n*df],xview:[fc-sp,fc+sp],series,y,pk,legend:[{label:'Data 0',color:GR.c0}],
     hlines:[{y:st.flev,color:GR.ink}],
     xlabel:'Frequency (MHz)',ylabel:'Relative Gain (dB)',xfmt:{dec:3},
     track:(xv,yv)=>xv.toFixed(3)+' MHz, '+yv.toFixed(2)+' dB'};
@@ -708,7 +713,7 @@ for(const k in SIGVIEWS){
   const cf=SIGVIEWS[k], id=cf.id, $=s=>document.getElementById(id+'-'+s);
   const st = S[k] = { id, lastMsg:null, rows:[], bands:{}, wf:{},
     nfft:1024, win:'blackmanharris', avg:1, fmax:false, fmin:false, flev:0, runF:true,
-    pts:1024, ttm:'free', tsl:'pos', tch:'0', tlev:0, tdel:0, runT:true,
+    pts:512, fspan:2e5, ttm:'free', tsl:'pos', tch:'0', tlev:0, tdel:0, runT:true,
     runW:true, wcm:'multi', wmin:-140, wmax:10, wver:0, wax:true, wgrid:false,
     runC:true, iqn:1024,
     gf:new GRPlot($('fft'),{ylim:[-140,10]}), gt:new GRPlot($('time'),{ylim:[-1,1],sym:true}),
@@ -740,7 +745,8 @@ for(const k in SIGVIEWS){
   on('tyo-m',()=>{ const d=tspan()/10; st.gt.ylim=[st.gt.ylim[0]-d,st.gt.ylim[1]-d]; st.gt.zoom=[]; re(); });
   on('tyr-p',()=>{ const c0=(st.gt.ylim[0]+st.gt.ylim[1])/2, h2=tspan(); st.gt.ylim=[c0-h2,c0+h2]; st.gt.zoom=[]; re(); });
   on('tyr-m',()=>{ const c0=(st.gt.ylim[0]+st.gt.ylim[1])/2, h2=tspan()/4; st.gt.ylim=[c0-h2,c0+h2]; st.gt.zoom=[]; re(); });
-  on('txm-p',()=>{ st.pts=Math.min(4096,st.pts*2); re(); }); on('txm-m',()=>{ st.pts=Math.max(64,st.pts/2); re(); });
+  const syncTwin=()=>{ const s=$('twin'); if(s) s.value=String(st.pts); };
+  on('txm-p',()=>{ st.pts=Math.min(4096,st.pts*2); syncTwin(); re(); }); on('txm-m',()=>{ st.pts=Math.max(64,st.pts/2); syncTwin(); re(); });
   $('ttm').onchange=e=>{ st.ttm=e.target.value; re(); }; $('tsl').onchange=e=>{ st.tsl=e.target.value; re(); }; $('tch').onchange=e=>{ st.tch=e.target.value; re(); };
   on('tlev-p',()=>{ st.tlev+=tspan()/40; re(); }); on('tlev-m',()=>{ st.tlev-=tspan()/40; re(); });
   on('tdel-p',()=>{ st.tdel=Math.min(st.pts-1,st.tdel+Math.max(1,Math.round(st.pts/20))); re(); }); on('tdel-m',()=>{ st.tdel=Math.max(0,st.tdel-Math.max(1,Math.round(st.pts/20))); re(); });
@@ -759,6 +765,8 @@ for(const k in SIGVIEWS){
   for(const x of (st.gc?['f','t','c']:['f','t'])){ const b=$('cp-'+x), p=$('pan-'+x);
     b.onclick=()=>{ const show=p.style.display==='none'; p.style.display=show?'':'none'; b.classList.toggle('on',show);
       st.lastMsg=null; setTimeout(()=>{ st.gf.draw(); st.gt.draw(); if(st.gc) st.gc.draw(); },0); }; }
+  $('fspan').onchange=e=>{ st.fspan=+e.target.value; st.gf.zoom=[]; re(); };
+  $('twin').onchange=e=>{ st.pts=+e.target.value; st.gt.zoom=[]; re(); };
   st.ftm='free'; showVals();
   if(cf.gainCtl){
     $('gainset').onclick=()=>{ const v=parseFloat($('gain').value);
