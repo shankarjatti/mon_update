@@ -55,6 +55,28 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 18:3x — user: "why Air and Marine UI is not added ... use that old repo only for air-marine work ... don't change anything in terrestrial work" + "transmitting 1090 MHz with a signal generator — is it detected in the ADS-B dwell?" — AIR & MARINE ADDED (VERIFIED), ADS-B GENERATOR SEEN (VERIFIED)
+* Cause of the 404: the main UI pointed the Air & Marine tab at `/terrestrial_src/airmaritime_console.html` on the 8099 server
+  (root = guru_mon_scan) — the old repo's air/maritime chain had never been connected to the X310 pipeline.
+* Built from the old repo `terrestrial_src` (GitHub 1stversiondone; its files NOT changed; terrestrial files NOT changed):
+  `edge_ch2/ch2_airmar_router.py` (new, 2nd subscriber of CH2 5202: AIS → TCP 7009 at 250 kS/s with 162.000 MHz at 0 Hz
+  = what the repo decoder's ±25 kHz AIS 1/2 branches and GMSK sps=5 need; CH2 gives 200 kS/s at 161.975 → phase-continuous −25 kHz
+  shift + stateful 5/4 resampler; ADS-B → 7010 at the real CH2 rate; zero-fill between dwells; 14 ms after a retune dropped),
+  `airmar_decoder_ext.py` (runs the repo's `airmaritime_decoder_live.py` unchanged, only ADSB_SOURCE_RATE_HZ = 200 kS/s as that file
+  asks), `airmar_bridge_ext.py` (repo bridge unchanged + real band table, detector-verdict ACTIVE, CH2 dwell / LO lock / gain status,
+  decoder run by the watchdog), `edge_ch2/airmar_console/` (X310 copy of the console, http 8789), watchdog components, main-UI tab URL.
+* Verified: router maths — AIS 1 (161.975) → −25.000 kHz, AIS 2 (162.025) → +25.000 kHz on the port, 250 kS/s, gain −20.02 dB in for
+  −20.00, block-wise output = whole-stream output (diff 2e-12). Live (CH2 Mode 1, 25 s): bridge saw the AIS and ADS-B dwells, real
+  spectra, decoder running, LO lock OK; 397 AIS + 403 ADS-B blocks routed. Main UI tab shows the console (CONNECTED, USRP-2945 · CH2).
+  The repo's AIS reference recording decodes only 0–2 sentences in 863 s even directly (noisy file) → no end-to-end AIS decode proof yet.
+* NOT possible on the current CH2: ADS-B DECODE — CH2 is 200 kS/s (user's 200 kHz per frequency); 1 Mb/s Mode-S needs ≥ 2 MS/s. Spectrum
+  and detection are real. In Mode 2 (auto lock) CH2 searches only DMR/NXDN/P25/TETRA → AIS / ADS-B are visited only in Mode 1.
+* ADS-B generator test (CH2 Mode 1, 60 s, then CH2 held on 1090 for 6 s + 4 s, restored to Mode 2): 6 of 7 ADS-B dwells ACTIVE (power rule,
+  peaks −61.8…−73.4 dBFS on a −80 floor). The generator tone is received at **1090.00039 MHz, +21.5 dB over the noise, −91.3 dBFS,
+  present in 100 % of segments** — but it sits inside the detector's ±2 kHz DC guard (the receiver's own DC is never reported as a signal),
+  so the narrowband rule does not count it; the ACTIVE verdicts came from ≈ 170 short (≤ 5 µs) spikes per second of unknown origin.
+  Clean CW test: generator at 1090.020 MHz (line at +20 kHz, outside the DC guard) — as the CH1 5.785 GHz test did.
+
 ### 2026-10-22 17:4x — user: "decoding of terrestrial is not working correctly ... use that repo of terrestrial" + "CH2 UI not showing correctly ... set it for current hardware" — DMR DECODE ROOT CAUSE FIXED (VERIFIED), CH2 CONSOLE ON THE X310 (VERIFIED), long-run + false-lock still OPEN
 * **Root cause, DMR decode (proven):** the repo's decoder (`allinone.py`, unchanged) splits each port into 16 channels at k × 12.5 kHz
   around 0 Hz, each ±6.25 kHz wide. The repo tuned its B210 to 446.118528 MHz on purpose (README §5: radio measured, centred in channel 0).

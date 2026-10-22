@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SecureCOM — Air &amp; Maritime Coupling Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Leaflet.js CSS & JS for Unified Map (Zero API Keys) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+<style>
+:root {
+  --bg:        #f4f5f7;
+  --panel:     #ffffff;
+  --panel2:    #eceef1;
+  --border:    #d3d7dd;
+  --text:      #1f2329;
+  --text-dim:  #4d545e;
+  --text-mute: #7b838e;
+  --accent:    #1a5f8a;
+  --ok:        #1f7a4d;
+  --warn:      #9a6a08;
+  --bad:       #b02a2a;
+  --grid:      #e4e7eb;
+
+  /* Decodio RED Plot Palette -- matches securecom_gui.html exactly */
+  --plot-bg:      #000000;
+  --plot-grid:    #303030;
+  --plot-axis:    #ffffff;
+  --plot-trace:   #ffe800;
+  --plot-region:  rgba(255,255,255,0.10);
+  --plot-region-a:rgba(60,220,60,0.22);
+
+  /* Draggable Pane Sizes */
+  --sidebar-w:   460px;
+  --bottom-h:    160px;
+  --mono: 'JetBrains Mono','DejaVu Sans Mono',monospace;
+  --sans: 'Inter','Segoe UI',sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr) 6px var(--bottom-h);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+/* ───────── Header ───────── */
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+}
+.h-title { font-weight: 700; letter-spacing: 0.02em; font-size: 14px; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.h-sub { color: var(--text-dim); font-size: 11px; }
+.h-spacer { flex: 1; }
+.badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-mute); }
+.dot.ok { background: var(--ok); }
+.dot.bad { background: var(--bad); }
+.dot.warn { background: var(--warn); animation: pulse 1.4s infinite; }
+@keyframes pulse { 0%,100%{ opacity: 1 } 50%{ opacity: 0.35 } }
+.h-clock { font-family: var(--mono); color: var(--text-dim); font-size: 11px; }
+
+/* ───────── Main Grid Layout ───────── */
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6px var(--sidebar-w);
+  overflow: hidden;
+}
+
+.maps-container {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: #e4e7eb;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Decodio Plot Window Frame */
+.decodio-frame {
+  background: var(--plot-bg);
+  border: 1px solid #303030;
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  flex: 1;
+}
+
+.decodio-head {
+  background: #11151c;
+  border-bottom: 1px solid #2a3445;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #e2e8f0;
+  flex-shrink: 0;
+}
+.decodio-head .title-badge { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.map-controls { display: flex; align-items: center; gap: 12px; font-size: 11px; }
+.map-controls label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+
+.map-viewport {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #0b0f19;
+}
+
+/* Leaflet Tactical Symbols & Markers */
+.leaflet-container { background: #0b0f19 !important; }
+.leaflet-popup-content-wrapper {
+  background: #1a2234 !important;
+  color: #f1f5f9 !important;
+  border: 1px solid #334155 !important;
+  border-radius: 4px !important;
+  font-family: var(--sans) !important;
+  font-size: 11px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+}
+.leaflet-popup-tip { background: #1a2234 !important; }
+
+/* Custom Tactical Symbols */
+.ship-badge {
+  background: rgba(37, 99, 235, 0.85);
+  border: 2px solid #60a5fa;
+  border-radius: 50%;
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.6);
+  transition: transform 0.2s;
+}
+.ship-badge:hover { transform: scale(1.2); }
+
+.plane-badge {
+  background: rgba(217, 119, 6, 0.85);
+  border: 2px solid #fbbf24;
+  border-radius: 50%;
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 0 10px rgba(217, 119, 6, 0.6);
+  transition: transform 0.2s;
+}
+.plane-badge:hover { transform: scale(1.2); }
+
+/* Decodio Footer Bar */
+.plot-foot {
+  background: #f0f0f0;
+  border: 1px solid #9a9a9a;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-family: var(--sans);
+  font-size: 10px;
+  color: #111;
+  margin-top: 4px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.plot-foot .cl { color: #333; }
+.plot-foot b { font-family: var(--mono); font-size: 10px; color: #000; min-width: 34px; display: inline-block; }
+.plot-foot input[type=number] { width: 46px; font-size: 10px; padding: 1px 3px; border: 1px solid #8f8f8f; font-family: var(--mono); }
+.plot-foot select { font-size: 10px; border: 1px solid #8f8f8f; padding: 0 2px; }
+.plot-foot button { font-size: 10px; padding: 2px 7px; border: 1px solid #8f8f8f; background: linear-gradient(#fdfdfd,#e4e4e4); color: #111; border-radius: 2px; cursor: pointer; }
+.plot-foot button:hover { background: linear-gradient(#fff,#d8e8f8); border-color: #3b7fc4; }
+.plot-foot label { display: flex; align-items: center; gap: 3px; color: #111; }
+.plot-foot .sp { flex: 1; }
+.freq-read { font-family: var(--mono); font-size: 14px; font-weight: 700; color: #000; letter-spacing: 2px; background: #fff; border: 1px solid #8f8f8f; padding: 0 6px; white-space: nowrap; }
+
+/* ───────── Draggable Splitters ───────── */
+.gutter { background: var(--border); position: relative; z-index: 5; user-select: none; }
+.gutter:hover, .gutter.drag { background: var(--accent); }
+.gutter-h { cursor: row-resize; }
+.gutter-v { cursor: col-resize; }
+.gutter::after { content: ''; position: absolute; inset: -3px; }
+.gutter-h::after { left: 0; right: 0; }
+.gutter-v::after { top: 0; bottom: 0; }
+
+/* ───────── Sidebar Panel (Decodio RED Tabs) ───────── */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel2);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-dim);
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+.tab:last-child { border-right: none; }
+.tab.active {
+  color: var(--accent);
+  background: var(--panel);
+  border-bottom: 2px solid var(--accent);
+}
+
+.tab-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: none;
+}
+.tab-panel.active { display: flex; flex-direction: column; gap: 10px; }
+
+/* Decodio Tables */
+table.info { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+table.info th {
+  text-align: left; color: var(--text-dim); font-weight: 600; font-size: 10px;
+  padding: 4px 4px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; background: var(--panel2);
+}
+table.info td { padding: 5px 4px; border-bottom: 1px solid var(--grid); font-family: var(--mono); }
+table.info tbody tr:hover { background: var(--panel2); cursor: pointer; }
+
+.hw-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--grid); font-size: 11.5px; }
+.hw-row .k { color: var(--text-dim); }
+.hw-row .v { font-family: var(--mono); }
+.hw-row .v.ok { color: var(--ok); }
+.hw-row .v.bad { color: var(--bad); }
+
+.btnrow { display: flex; gap: 6px; margin-top: 6px; }
+button {
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 10px; border-radius: 3px; font-size: 11px; cursor: pointer; font-family: var(--sans); font-weight: 600;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: #14496b; }
+button.danger { border-color: var(--bad); color: var(--bad); }
+button.danger:hover { background: var(--bad); color: #fff; }
+
+label.small { font-size: 10.5px; color: var(--text-dim); display: block; margin: 8px 0 3px; font-weight: 600; }
+input[type=range] { width: 100%; }
+input[type=number] {
+  width: 64px; background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+  font-family: var(--mono); font-size: 11px; padding: 3px 5px; border-radius: 2px;
+}
+
+/* Schedule Table */
+.sched-row { display: grid; grid-template-columns: 70px 1.25fr 1fr 1fr; gap: 7px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--grid); }
+.sched-row input[type=number] { width: 100%; }
+.sched-row .name { font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.sched-field { display: flex; flex-direction: column; gap: 2px; }
+.sched-field .lbl { font-size: 9px; color: var(--text-mute); }
+
+/* Bottom Strip: Data Packet Meters + System Console Log */
+.bottom { display: grid; grid-template-columns: 240px 6px minmax(0, 1fr); overflow: hidden; background: var(--panel); border-top: 1px solid var(--border); }
+.audio { padding: 8px 10px; overflow-y: auto; border-right: 1px solid var(--border); }
+.audio-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; font-weight: 700; }
+.audio-ch { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.audio-ch .nm { width: 64px; font-family: var(--mono); font-size: 10.5px; }
+.meter { flex: 1; height: 8px; background: var(--panel2); border-radius: 2px; overflow: hidden; border: 1px solid var(--border); }
+.meter i { display: block; height: 100%; width: 2%; background: var(--text-mute); transition: width 0.12s linear; }
+.audio-ch.live .meter i { background: var(--ok); }
+.console { padding: 8px 10px; overflow-y: auto; font-family: var(--mono); font-size: 11px; line-height: 1.55; background: #0b0f15; color: #d1d5db; }
+.console .ln { white-space: pre; }
+.console .ln.ais { color: #60a5fa; }
+.console .ln.adsb { color: #fbbf24; }
+.console .ln.sys { color: #9ca3af; }
+
+/* RF Spectrum graph -- same convention as securecom_gui.html's cvSpectrum:
+   black canvas, single yellow trace, white grid/axis. */
+.graph-box { position: relative; overflow: hidden; background: var(--plot-bg); flex: 1; min-height: 0; }
+.graph-box canvas { display: block; width: 100%; height: 100%; }
+.spec-lbl {
+  position: absolute; top: 4px; left: 8px; font-family: var(--mono); font-size: 10px;
+  color: var(--plot-axis); z-index: 2; letter-spacing: .05em; pointer-events: none;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div>
+    <div class="h-title"><span>📡</span> SECURECOM — AIR &amp; MARITIME CONSOLE</div>
+    <div class="h-sub">Decodio RED Architecture · AIS (162 MHz) &amp; ADS-B (1090 MHz) Receiver</div>
+  </div>
+  <div class="h-spacer"></div>
+  <div class="badge"><span class="dot warn" id="dotSystem"></span><span id="lblSystem">NOT CONNECTED</span></div>
+  <div class="badge"><span class="dot ok" id="dotHw"></span><span id="lblHw">USRP-2945 · CH2 · Live</span></div>
+  <div class="badge">🚢 Ships: <b id="badge-ais-cnt" style="color:#60a5fa;">0</b></div>
+  <div class="badge">✈️ Aircraft: <b id="badge-adsb-cnt" style="color:#fbbf24;">0</b></div>
+  <div class="h-clock" id="clock">00:00:00 UTC</div>
+</header>
+
+<main>
+  <!-- Left Side: 1 UNIFIED MAP + Footer Strip -->
+  <div class="maps-container">
+
+    <!-- RF SPECTRUM (real IQ from Module 1's AIS/ADS-B TCP ports, via airmaritime_bridge.py) -->
+    <div class="decodio-frame" id="spectrumFrame" style="flex:0 0 170px; margin-bottom:6px;">
+      <div class="decodio-head">
+        <div class="title-badge">📶 RF SPECTRUM — AIS / ADS-B</div>
+      </div>
+      <div class="graph-box" id="boxAirSpectrum">
+        <canvas id="cvAirSpectrum"></canvas>
+        <div class="spec-lbl" id="airSpecLbl">RF Spectrum</div>
+      </div>
+    </div>
+
+    <!-- 1 UNIFIED RADAR MAP FRAME -->
+    <div class="decodio-frame">
+      <div class="decodio-head">
+        <div class="title-badge">🌐 UNIFIED AIR &amp; MARITIME TACTICAL MAP</div>
+        <div class="map-controls">
+          <label style="color:#60a5fa;"><input type="checkbox" id="chk-show-ships" checked onchange="toggleFilter('ships')"> 🚢 Show Ships (AIS 162M)</label>
+          <label style="color:#fbbf24;"><input type="checkbox" id="chk-show-planes" checked onchange="toggleFilter('planes')"> ✈️ Show Aircraft (ADS-B 1090M)</label>
+        </div>
+      </div>
+      <div class="map-viewport" id="map-unified"></div>
+    </div>
+
+    <!-- Decodio Footer Strip -->
+    <div class="plot-foot">
+      <span class="cl">Avg:</span><input type="number" id="fAvg" value="64" min="1" max="256" step="1">
+      <span class="cl">Len:</span><select id="fLen"><option>Auto</option><option>512</option><option>1024</option></select>
+      <span class="cl">Max:</span><b id="fMax">-12 dB</b>
+      <span class="cl">Min:</span><b id="fMin">-95 dB</b>
+      <span class="cl">Refresh:</span><input type="number" id="fRefresh" value="8" min="1" max="30" step="1">
+      <button id="fAutoScale">Auto Scale</button>
+      <label><input type="checkbox" id="fMaxHold"> MaxHold</label>
+      <span class="sp"></span>
+      <span class="freq-read" id="freqRead">162.000000 / 1090.000000 MHz</span>
+    </div>
+
+  </div>
+
+  <!-- Draggable Vertical Splitter for Sidebar -->
+  <div class="gutter gutter-v" data-split="sidebar"></div>
+
+  <!-- Right Side: Decodio Sidebar Panels (Signals, Hardware, Schedule, ZMQ JSON Feed) -->
+  <div class="sidebar">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('signals')" id="tb-signals">Signals</div>
+      <div class="tab" onclick="switchTab('hardware')" id="tb-hardware">Hardware</div>
+      <div class="tab" onclick="switchTab('schedule')" id="tb-schedule">Schedule</div>
+      <div class="tab" onclick="switchTab('jsonfeed')" id="tb-jsonfeed">ZMQ JSON Feed</div>
+    </div>
+
+    <!-- TAB 1: SIGNALS INFO -->
+    <div class="tab-panel active" id="panel-signals">
+      <label class="small" style="margin-top:0;">Protocol Band Signals</label>
+      <table class="info" id="signalsTable">
+        <thead>
+          <tr><th>Band</th><th>Freq MHz</th><th>State</th><th>Targets</th></tr>
+        </thead>
+        <tbody>
+          <tr><td style="color:#2563eb;font-weight:700;">AIS A+B</td><td>161.975 / 162.025</td><td style="color:var(--ok);">ACTIVE</td><td id="sig-ais-cnt">0</td></tr>
+          <tr><td style="color:#d97706;font-weight:700;">ADS-B</td><td>1090.000</td><td style="color:var(--ok);">ACTIVE</td><td id="sig-adsb-cnt">0</td></tr>
+        </tbody>
+      </table>
+
+      <label class="small">Live Tracked Targets</label>
+      <table class="info">
+        <thead>
+          <tr><th>ID / MMSI</th><th>Symbol &amp; Type</th><th>Speed</th><th>Heading</th></tr>
+        </thead>
+        <tbody id="tbl-targets">
+          <tr><td colspan="4" style="color:var(--text-mute);">No active targets decoded yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TAB 2: HARDWARE CONTROL -->
+    <div class="tab-panel" id="panel-hardware">
+      <div class="hw-row"><span class="k">Device</span><span class="v" id="hwDevice">USRP-2945 (X310) · CH2</span></div>
+      <div class="hw-row"><span class="k">Link</span><span class="v" id="hwLink">—</span></div>
+      <div class="hw-row"><span class="k">LO Lock</span><span class="v" id="hwLo">—</span></div>
+      <div class="hw-row"><span class="k">Sample Rate</span><span class="v" id="hwRate">AIS 250 kSps (CH2 200 kSps → 5/4) · ADS-B 200 kSps</span></div>
+      <div class="hw-row"><span class="k">CH2 dwell now</span><span class="v" id="hwDwell">—</span></div>
+      <div class="hw-row"><span class="k">Decoder</span><span class="v" id="hwDec">—</span></div>
+      <div class="hw-row"><span class="k">ADS-B decode</span><span class="v" style="color:var(--text-mute)">needs ≥ 2 MSps; CH2 gives 200 kSps (spectrum + detection real, no decode)</span></div>
+
+      <div class="hw-row" style="margin-top:8px;"><span class="k">RX Gain (CH2)</span><span class="v" id="hwGainVal">—</span></div>
+      <input type="range" id="hwGain" min="0" max="99" value="10" oninput="document.getElementById('hwGainVal').textContent=this.value+' dB'">
+      <button style="margin-top:4px;" onclick="applyGain()">Apply Gain (Restart Hardware)</button>
+
+      <div class="hw-row" style="margin-top:8px;"><span class="k">Squelch Threshold</span><span class="v" id="hwSqVal">-25 dB</span></div>
+      <input type="range" id="hwSq" min="-90" max="0" step="1" value="-25" oninput="document.getElementById('hwSqVal').textContent=this.value+' dB'">
+      <button style="margin-top:4px;" onclick="applySq()">Apply Squelch</button>
+
+      <div class="btnrow" style="margin-top:12px;">
+        <button class="primary" onclick="sendCmd('start_flowgraph')">Start Hardware</button>
+        <button class="danger" onclick="sendCmd('stop_flowgraph')">Stop</button>
+      </div>
+    </div>
+
+    <!-- TAB 3: SCHEDULE -->
+    <div class="tab-panel" id="panel-schedule">
+      <label class="small" style="margin-top:0; color:var(--text-mute);" id="schedConnLbl">
+        connecting to the air/maritime bridge (ws://127.0.0.1:8887) …
+      </label>
+      <div class="sched-row" style="font-size:10px;color:var(--text-mute);">
+        <div>BAND</div>
+        <div class="sched-field"><div class="lbl">CENTRE FREQ (MHz)</div></div>
+        <div class="sched-field"><div class="lbl">DWELL (s)</div></div>
+        <div class="sched-field"><div class="lbl">GAP (s)</div></div>
+      </div>
+      <div id="schedRows">
+        <div class="sched-row">
+          <div class="name" style="color:#2563eb;">AIS 162M</div>
+          <div class="sched-field"><input type="number" id="freq-ais" value="162.000" step="0.005"></div>
+          <div class="sched-field"><input type="number" id="dwell-ais" value="1.0" step="0.5"></div>
+          <div class="sched-field"><input type="number" id="gap-ais" value="1.0" step="0.1"></div>
+        </div>
+        <div class="sched-row">
+          <div class="name" style="color:#d97706;">ADS-B 1090</div>
+          <div class="sched-field"><input type="number" id="freq-adsb" value="1090.000" step="0.1"></div>
+          <div class="sched-field"><input type="number" id="dwell-adsb" value="1.0" step="0.5"></div>
+          <div class="sched-field"><input type="number" id="gap-adsb" value="1.0" step="0.1"></div>
+        </div>
+      </div>
+      <div class="btnrow" style="margin-top:12px;">
+        <button class="primary" onclick="applySchedule()">Apply Schedule</button>
+        <button onclick="resetSchedule()">Reset Defaults</button>
+      </div>
+      <label class="small" style="margin-top:10px; color:var(--text-mute); text-transform:none; letter-spacing:0;">
+        AIS and ADS-B are visited by CH2 of the USRP-2945 in its MON frame, together with the terrestrial
+        bands; dwell and frequency come from the CH2 scan plan (scan_plan.py) and are shown here as they run.
+        AIS: CH2 tunes 161.975 MHz, the router puts 162.000 MHz at 0 Hz so both AIS channels decode.
+      </label>
+    </div>
+
+    <!-- TAB 4: REAL-TIME ZMQ JSON STREAM -->
+    <div class="tab-panel" id="panel-jsonfeed">
+      <div class="btnrow" style="margin-top:0;margin-bottom:6px;">
+        <button class="primary" id="btn-pause-json" onclick="togglePauseJSON()">Pause Feed</button>
+        <button onclick="clearJSONFeed()">Clear Buffer</button>
+        <button onclick="copyJSONFeed()">Copy JSON</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-mute);margin-bottom:4px;">Raw ZMQ Stream Payload (Port 9201 AIS / Port 9202 ADS-B):</div>
+      <pre id="jsonStreamBox" style="flex:1;background:#0b0f15;border:1px solid var(--border);border-radius:3px;padding:8px;font-family:var(--mono);font-size:11px;color:#34d399;overflow-y:auto;max-height:360px;white-space:pre-wrap;word-break:break-all;">// Waiting for live ZMQ JSON data from GNU Radio...</pre>
+    </div>
+
+  </div>
+</main>
+
+<!-- Draggable Horizontal Splitter for Bottom Strip -->
+<div class="gutter gutter-h" data-split="bottom"></div>
+
+<!-- Bottom Strip: Data Packet Meters + System Console Log -->
+<div class="bottom">
+  <div class="audio">
+    <div class="audio-title">Data Stream Activity</div>
+    <div class="audio-ch" id="ch-ais"><span class="nm" style="color:#2563eb;font-weight:700;">AIS Data</span><div class="meter"><i id="meter-ais"></i></div></div>
+    <div class="audio-ch" id="ch-adsb"><span class="nm" style="color:#d97706;font-weight:700;">ADS-B Data</span><div class="meter"><i id="meter-adsb"></i></div></div>
+  </div>
+  <div class="gutter-v"></div>
+  <div class="console" id="console">
+    <div class="ln sys">[SYS] Initializing Decodio RED Air &amp; Maritime Console...</div>
+    <div class="ln sys">[SYS] 1 Unified Map active for both Ships (🚢) and Aircraft (✈️)</div>
+  </div>
+</div>
+
+<script>
+// Initialize 1 UNIFIED MAP for both Ships & Aircraft
+const mapUnified = L.map('map-unified', { zoomControl: true }).setView([37.7000, -122.4000], 10);
+
+// Tile Layer Definitions
+const mbtilesUrl   = 'http://127.0.0.1:8080/tiles/{z}/{x}/{y}.png';
+const cartoDarkUrl = 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+const osmUrl       = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const esriSatUrl   = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
+const mbtilesAttr = 'Offline Tactical MBTiles (Zoom 0-18) &copy; SecureCOM';
+const cartoAttr   = '&copy; CARTO &copy; OpenStreetMap';
+const osmAttr     = '&copy; OpenStreetMap contributors';
+const esriAttr    = 'Tiles &copy; Esri &mdash; Earthstar Geographics';
+
+// Leaflet Tile Layers configured for smooth zooming without grid flickering
+const layerMBTiles = L.tileLayer(mbtilesUrl, {
+  attribution: mbtilesAttr,
+  minZoom: 0,
+  maxZoom: 18,
+  maxNativeZoom: 12,
+  tileSize: 256,
+  updateWhenIdle: false,
+  updateWhenZooming: true,
+  keepBuffer: 10
+});
+
+const layerCarto = L.tileLayer(cartoDarkUrl, { attribution: cartoAttr, minZoom: 0, maxZoom: 19, keepBuffer: 10, updateWhenIdle: false });
+const layerOSM   = L.tileLayer(osmUrl,       { attribution: osmAttr,   minZoom: 0, maxZoom: 19, keepBuffer: 10, updateWhenIdle: false });
+const layerSat   = L.tileLayer(esriSatUrl,   { attribution: esriAttr,  minZoom: 0, maxZoom: 18, keepBuffer: 10, updateWhenIdle: false });
+
+// Default Layer: Offline MBTiles
+layerMBTiles.addTo(mapUnified);
+
+// Layer Switcher Control (Top Right Map Control)
+L.control.layers({
+  "Offline MBTiles Grid (Default)": layerMBTiles,
+  "Satellite": layerSat,
+  "Street Map (OpenStreetMap)": layerOSM,
+  "Tactical Dark Canvas": layerCarto
+}, null, { position: 'topright' }).addTo(mapUnified);
+
+// Smooth Zoom & Layout Adjustment
+mapUnified.on('zoomend moveend', () => {
+  mapUnified.invalidateSize({ animate: false });
+});
+
+// Target Markers & Data Storage
+const aisMarkers = {}, adsbMarkers = {};
+const aisData = {}, adsbData = {};
+let showShips = true, showPlanes = true;
+let ws = null;
+let wsSched = null;  // separate connection to bridge_server.py (8787) -- see connectSchedWS()
+
+// Data Stream Activity meters -- real, not decorative. Each bar reflects an
+// actual message received on that ZMQ feed in the last STREAM_STALE_MS, the
+// same "no simulation, ever" rule the terrestrial console follows for its
+// own audio meters (gui/securecom_gui.html). No message recently -> the bar
+// decays back to idle grey, exactly like a real dead channel.
+const STREAM_STALE_MS = 4000;
+const lastStreamMsg = { ais: 0, adsb: 0 };
+function pulseStream(kind) {
+  lastStreamMsg[kind] = performance.now();
+  const el = document.getElementById(`ch-${kind}`);
+  const bar = document.getElementById(`meter-${kind}`);
+  if (!el || !bar) return;
+  el.classList.add('live');
+  bar.style.width = '90%';
+}
+setInterval(() => {
+  const now = performance.now();
+  for (const kind of ['ais', 'adsb']) {
+    const el = document.getElementById(`ch-${kind}`);
+    const bar = document.getElementById(`meter-${kind}`);
+    if (!el || !bar) continue;
+    if (now - lastStreamMsg[kind] > STREAM_STALE_MS) {
+      el.classList.remove('live');
+      bar.style.width = '2%';
+    }
+  }
+}, 500);
+
+// Clock
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toISOString().substr(11, 8) + ' UTC';
+}, 1000);
+
+function logConsole(text, type='sys') {
+  const c = document.getElementById('console');
+  const div = document.createElement('div');
+  div.className = `ln ${type}`;
+  const ts = new Date().toISOString().substr(11, 8);
+  div.textContent = `[${ts}] ${text}`;
+  c.appendChild(div);
+  c.scrollTop = c.scrollHeight;
+}
+
+// ───────── Draggable Setup (Splitters) ─────────
+const SPLITS = {
+  sidebar: { varName: '--sidebar-w', axis: 'x', invert: true,  min: 240, max: 800 },
+  bottom:  { varName: '--bottom-h',  axis: 'y', invert: true,  min: 80,  max: 480 }
+};
+
+(function initSplitters() {
+  let cur = null;
+  const px = k => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(SPLITS[k].varName)) || 0;
+
+  document.querySelectorAll('.gutter').forEach(g => {
+    g.addEventListener('mousedown', e => {
+      const k = g.dataset.split;
+      if (!SPLITS[k]) return;
+      cur = { k, g, x: e.clientX, y: e.clientY, start: px(k) };
+      g.classList.add('drag');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = SPLITS[k].axis === 'x' ? 'col-resize' : 'row-resize';
+      e.preventDefault();
+    });
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!cur) return;
+    const cfg = SPLITS[cur.k];
+    let d = cfg.axis === 'x' ? (e.clientX - cur.x) : (e.clientY - cur.y);
+    if (cfg.invert) d = -d;
+    
+    const v = Math.max(cfg.min, Math.min(cfg.max, cur.start + d));
+    document.documentElement.style.setProperty(cfg.varName, v + 'px');
+
+    mapUnified.invalidateSize();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!cur) return;
+    cur.g.classList.remove('drag');
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    cur = null;
+    mapUnified.invalidateSize();
+  });
+})();
+
+// WebSocket Connection
+function connectWS() {
+  ws = new WebSocket('ws://127.0.0.1:8887');
+  
+  ws.onopen = () => {
+    document.getElementById('dotSystem').className = 'dot ok';
+    document.getElementById('lblSystem').textContent = 'CONNECTED';
+    logConsole('WebSocket bridge connected to ws://127.0.0.1:8887', 'sys');
+  };
+
+  ws.onclose = () => {
+    document.getElementById('dotSystem').className = 'dot bad';
+    document.getElementById('lblSystem').textContent = 'NOT CONNECTED';
+    logConsole('WebSocket connection lost. Reconnecting...', 'sys');
+    for (const kind of ['ais', 'adsb']) {
+      lastStreamMsg[kind] = 0;
+      document.getElementById(`ch-${kind}`)?.classList.remove('live');
+      const bar = document.getElementById(`meter-${kind}`);
+      if (bar) bar.style.width = '2%';
+    }
+    setTimeout(connectWS, 3000);
+  };
+
+  let isJSONPaused = false;
+
+  window.appendJSONPayload = function(topic, port, payload) {
+    if (isJSONPaused) return;
+    const box = document.getElementById('jsonStreamBox');
+    const ts = new Date().toISOString();
+    const entry = {
+      timestamp: ts,
+      zmq_port: port,
+      protocol: topic,
+      payload: payload
+    };
+
+    const formatted = JSON.stringify(entry, null, 2);
+    if (box.textContent.startsWith('// Waiting')) {
+      box.textContent = formatted;
+    } else {
+      box.textContent += '\n\n' + formatted;
+    }
+    box.scrollTop = box.scrollHeight;
+  };
+
+  window.togglePauseJSON = function() {
+    isJSONPaused = !isJSONPaused;
+    const btn = document.getElementById('btn-pause-json');
+    btn.textContent = isJSONPaused ? 'Resume Feed' : 'Pause Feed';
+    btn.className = isJSONPaused ? 'danger' : 'primary';
+    logConsole(isJSONPaused ? 'ZMQ JSON Feed paused' : 'ZMQ JSON Feed resumed', 'sys');
+  };
+
+  ws.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'init_state') {
+        // Clear all previous markers and data objects
+        Object.keys(aisMarkers).forEach(k => { mapUnified.removeLayer(aisMarkers[k]); delete aisMarkers[k]; });
+        Object.keys(adsbMarkers).forEach(k => { mapUnified.removeLayer(adsbMarkers[k]); delete adsbMarkers[k]; });
+        Object.keys(aisData).forEach(k => delete aisData[k]);
+        Object.keys(adsbData).forEach(k => delete adsbData[k]);
+
+        msg.ais_vessels.forEach(v => { updateAIS(v); appendJSONPayload('AIS_VESSEL', 9201, v); });
+        msg.adsb_aircraft.forEach(a => { updateADSB(a); appendJSONPayload('ADSB_FLIGHT', 9202, a); });
+        renderTables();
+      } else if (msg.type === 'ais_update') {
+        updateAIS(msg.target);
+        pulseStream('ais');
+        appendJSONPayload('AIS_VESSEL', 9201, msg.target);
+        logConsole(`AIS Target MMSI ${msg.target.mmsi} (${msg.target.name || 'SHIP'}) updated`, 'ais');
+      } else if (msg.type === 'adsb_update') {
+        updateADSB(msg.target);
+        pulseStream('adsb');
+        appendJSONPayload('ADSB_FLIGHT', 9202, msg.target);
+        logConsole(`ADS-B Flight ICAO ${msg.target.icao} (${msg.target.callsign || 'FLT'}) updated`, 'adsb');
+      } else if (msg.type === 'spectrum') {
+        handleAirSpectrum(msg);
+      } else if (msg.type === 'status') {
+        const set = (id, t, ok) => { const e = document.getElementById(id); if (e) { e.textContent = t; if (ok != null) e.className = 'v ' + (ok ? 'ok' : ''); } };
+        if (msg.device) set('hwDevice', msg.device);
+        if (msg.link) set('hwLink', msg.link, true);
+        set('hwLo', msg.lo_lock || '—', msg.lo_lock === 'OK');
+        if (msg.gain_db != null) set('hwGainVal', msg.gain_db + ' dB (real)');
+        set('hwDwell', msg.active_band_am ? (msg.active_band_am === 'ais' ? 'AIS (161.975 MHz)' : 'ADS-B (1090 MHz)') : 'other CH2 bands', !!msg.active_band_am);
+        set('hwDec', msg.flowgraph_running ? 'RUNNING (airmaritime_decoder_live)' : 'not up', !!msg.flowgraph_running);
+        document.getElementById('lblHw').textContent = 'USRP-2945 · CH2 · ' + (msg.flowgraph_running ? 'Live' : 'decoder not up');
+      } else if (msg.type === 'note') {
+        logConsole(msg.text, 'sys');
+      }
+    } catch(e) {}
+  };
+}
+
+// A target with no real position yet (e.g. an AIS static-data message or an
+// ADS-B identification/velocity message before any position fix) is real
+// data with an unknown location -- it must not be plotted at a hardcoded
+// fallback coordinate, which would draw a marker for a place the target was
+// never actually reported at.
+function hasPosition(t) {
+  return typeof t.lat === 'number' && typeof t.lon === 'number';
+}
+
+function updateAIS(v) {
+  aisData[v.mmsi] = v;
+
+  if (hasPosition(v)) {
+    if (!aisMarkers[v.mmsi]) {
+      const icon = L.divIcon({
+        html: '<div class="ship-badge">🚢</div>',
+        className: 'custom-ship-marker',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+      aisMarkers[v.mmsi] = L.marker([v.lat, v.lon], { icon }).addTo(mapUnified);
+    } else {
+      aisMarkers[v.mmsi].setLatLng([v.lat, v.lon]);
+    }
+    if (!showShips) mapUnified.removeLayer(aisMarkers[v.mmsi]);
+
+    aisMarkers[v.mmsi].bindPopup(`
+      <b style="color:#60a5fa;">🚢 ${v.name || 'VESSEL'}</b><br>
+      <b>MMSI:</b> ${v.mmsi}<br>
+      <b>Callsign:</b> ${v.callsign || 'N/A'}<br>
+      <b>Speed:</b> ${v.speed != null ? v.speed : '—'} kn<br>
+      <b>Course:</b> ${v.course != null ? v.course : '—'}°
+    `);
+  }
+
+  renderTables();
+}
+
+function updateADSB(a) {
+  adsbData[a.icao] = a;
+
+  if (hasPosition(a)) {
+    if (!adsbMarkers[a.icao]) {
+      const icon = L.divIcon({
+        html: '<div class="plane-badge">✈️</div>',
+        className: 'custom-plane-marker',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+      adsbMarkers[a.icao] = L.marker([a.lat, a.lon], { icon }).addTo(mapUnified);
+    } else {
+      adsbMarkers[a.icao].setLatLng([a.lat, a.lon]);
+    }
+    if (!showPlanes) mapUnified.removeLayer(adsbMarkers[a.icao]);
+
+    adsbMarkers[a.icao].bindPopup(`
+      <b style="color:#fbbf24;">✈️ ${a.callsign || 'FLIGHT'}</b><br>
+      <b>ICAO Hex:</b> ${a.icao}<br>
+      <b>Altitude:</b> ${a.alt != null ? a.alt : '—'} ft<br>
+      <b>Speed:</b> ${a.speed != null ? a.speed : '—'} kts<br>
+      <b>Heading:</b> ${a.heading != null ? a.heading : '—'}°
+    `);
+  }
+
+  renderTables();
+}
+
+function toggleFilter(type) {
+  if (type === 'ships') {
+    showShips = document.getElementById('chk-show-ships').checked;
+    Object.values(aisMarkers).forEach(m => {
+      if (showShips) m.addTo(mapUnified); else mapUnified.removeLayer(m);
+    });
+  } else if (type === 'planes') {
+    showPlanes = document.getElementById('chk-show-planes').checked;
+    Object.values(adsbMarkers).forEach(m => {
+      if (showPlanes) m.addTo(mapUnified); else mapUnified.removeLayer(m);
+    });
+  }
+}
+
+function focusTarget(id) {
+  if (aisMarkers[id]) {
+    mapUnified.setView(aisMarkers[id].getLatLng(), 12);
+    aisMarkers[id].openPopup();
+  } else if (adsbMarkers[id]) {
+    mapUnified.setView(adsbMarkers[id].getLatLng(), 12);
+    adsbMarkers[id].openPopup();
+  }
+}
+
+function renderTables() {
+  const aisList = Object.values(aisData);
+  const adsbList = Object.values(adsbData);
+
+  document.getElementById('badge-ais-cnt').textContent = aisList.length;
+  document.getElementById('badge-adsb-cnt').textContent = adsbList.length;
+  document.getElementById('sig-ais-cnt').textContent = aisList.length;
+  document.getElementById('sig-adsb-cnt').textContent = adsbList.length;
+
+  const tbody = document.getElementById('tbl-targets');
+  // "—" for a value the target's own messages haven't reported yet -- never
+  // a plausible-looking placeholder number standing in for real data.
+  const allTargets = [
+    ...aisList.map(v => ({ id: v.mmsi, symbol: '🚢', type: 'AIS Marine Vessel', speed: v.speed != null ? `${v.speed} kn` : '—', hdg: v.course != null ? `${v.course}°` : '—', color: '#60a5fa' })),
+    ...adsbList.map(a => ({ id: a.icao, symbol: '✈️', type: 'ADS-B Aircraft', speed: a.speed != null ? `${a.speed} kts` : '—', hdg: a.heading != null ? `${a.heading}°` : '—', color: '#fbbf24' }))
+  ];
+
+  if (allTargets.length === 0) return;
+
+  tbody.innerHTML = allTargets.map(t => `
+    <tr onclick="focusTarget('${t.id}')">
+      <td style="font-weight:700;color:${t.color};">${t.id}</td>
+      <td>${t.symbol} ${t.type}</td>
+      <td>${t.speed}</td>
+      <td>${t.hdg}</td>
+    </tr>
+  `).join('');
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+
+  document.getElementById(`tb-${name}`).classList.add('active');
+  document.getElementById(`panel-${name}`).classList.add('active');
+}
+
+function sendCmd(cmd) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ cmd }));
+    logConsole(`Sent command '${cmd}' to hardware bridge`, 'sys');
+  }
+}
+
+function applyGain() {
+  const g = document.getElementById('hwGain').value;
+  logConsole(`Applied hardware RX Gain: ${g} dB`, 'sys');
+}
+
+function applySq() {
+  const sq = document.getElementById('hwSq').value;
+  logConsole(`Applied squelch threshold: ${sq} dB`, 'sys');
+}
+
+// ── Real dwell/gap/freq schedule control -----------------------------------
+// AIS + ADS-B are just two more entries in Module 1's own BANDS table
+// (module1/src/main.cpp), read only at process startup -- so applying a
+// schedule change here goes over a SECOND WebSocket, straight to
+// bridge_server.py (the one process that actually owns Module 1 and its
+// restart logic), exactly the same 'apply_schedule' command the terrestrial
+// console's Schedule tab already sends for its own 8 bands.
+const SCHED_KEYS = ['ais', 'adsb'];
+const schedEdited = { ais: false, adsb: false };
+
+function connectSchedWS() {
+  wsSched = new WebSocket('ws://127.0.0.1:8887');   // X310: the air/maritime bridge sends the real CH2 dwell status
+  const lbl = document.getElementById('schedConnLbl');
+
+  wsSched.onopen = () => {
+    if (lbl) { lbl.textContent = 'connected to the air/maritime bridge (ws://127.0.0.1:8887) — CH2 scan plan values'; lbl.style.color = 'var(--ok)'; }
+  };
+  wsSched.onclose = () => {
+    if (lbl) { lbl.textContent = 'hardware bridge not connected -- start run_securecom.sh first. Reconnecting…'; lbl.style.color = 'var(--bad)'; }
+    setTimeout(connectSchedWS, 3000);
+  };
+  wsSched.onerror = () => {};
+  wsSched.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type !== 'status') return;
+      // active_band_am is Module 1's OWN "DWELL band=AIS/ADSB ..." log line,
+      // parsed by bridge_server.py -- the same authoritative source the
+      // terrestrial console's spectrum graph uses to pick which band it's
+      // showing (STATE['active_band']), not a signal-strength guess. This is
+      // what tells the RF Spectrum graph which band to display; see
+      // drawAirSpectrum(). Using RMS/signal-threshold for that instead (an
+      // earlier version did) made AIS look broken next to ADS-B for a mundane
+      // reason: AIS's 162 MHz noise floor sits well under the display's
+      // "active" threshold, ADS-B's 1090 MHz ambient RF usually doesn't -- so
+      // AIS was genuinely being dwelled on and just looked idle.
+      if (msg.active_band_am === 'ais' || msg.active_band_am === 'adsb') {
+        trueDwellBand = msg.active_band_am;
+        trueDwellT = performance.now();
+      } else if (msg.active_band_am == null) {
+        trueDwellBand = null;  // in a gap right now -- neither AIS nor ADS-B
+      }
+      // Real values Module 1 is actually running with right now. Only adopt
+      // them into a field the operator hasn't just edited, same rule the
+      // terrestrial console's schedule tab uses -- otherwise a live status
+      // broadcast could stomp on an edit mid-keystroke.
+      for (const k of SCHED_KEYS) {
+        if (schedEdited[k]) continue;
+        if (msg.dwell && msg.dwell[k] != null) {
+          const el = document.getElementById(`dwell-${k}`);
+          if (el && document.activeElement !== el) el.value = msg.dwell[k];
+        }
+        if (msg.gap && msg.gap[k] != null) {
+          const el = document.getElementById(`gap-${k}`);
+          if (el && document.activeElement !== el) el.value = msg.gap[k];
+        }
+        if (msg.freq && msg.freq[k] != null) {
+          const el = document.getElementById(`freq-${k}`);
+          if (el && document.activeElement !== el) el.value = Number(msg.freq[k]).toFixed(6);
+        }
+      }
+    } catch (e) {}
+  };
+}
+
+for (const k of SCHED_KEYS) {
+  for (const field of ['dwell', 'gap', 'freq']) {
+    const el = document.getElementById(`${field}-${k}`);
+    if (el) el.addEventListener('input', () => { schedEdited[k] = true; });
+  }
+}
+
+function applySchedule() {
+  if (!(wsSched && wsSched.readyState === WebSocket.OPEN)) {
+    logConsole('hardware bridge not connected -- cannot apply schedule to real hardware', 'sys');
+    return;
+  }
+  const dwell = {}, gap = {}, freq = {};
+  for (const k of SCHED_KEYS) {
+    dwell[k] = parseFloat(document.getElementById(`dwell-${k}`).value) || 1.0;
+    gap[k]   = parseFloat(document.getElementById(`gap-${k}`).value) || 0.0;
+    freq[k]  = parseFloat(document.getElementById(`freq-${k}`).value);
+  }
+  wsSched.send(JSON.stringify({ cmd: 'apply_schedule', dwell, gap, freq }));
+  for (const k of SCHED_KEYS) schedEdited[k] = false;
+  logConsole('asked the bridge for the AIS/ADS-B schedule (set by the CH2 scan plan)', 'sys');
+}
+
+function resetSchedule() {
+  document.getElementById('freq-ais').value = '162.000000';
+  document.getElementById('dwell-ais').value = 1.0;
+  document.getElementById('gap-ais').value = 1.0;
+  document.getElementById('freq-adsb').value = '1090.000000';
+  document.getElementById('dwell-adsb').value = 1.0;
+  document.getElementById('gap-adsb').value = 1.0;
+  for (const k of SCHED_KEYS) schedEdited[k] = true;  // don't let a stray status overwrite the reset before Apply
+  logConsole('schedule fields reset to defaults (press Apply Schedule to send)', 'sys');
+}
+
+function clearJSONFeed() {
+  document.getElementById('jsonStreamBox').textContent = '// Buffer cleared. Waiting for live ZMQ JSON data...';
+  logConsole('Cleared ZMQ JSON feed buffer', 'sys');
+}
+
+function copyJSONFeed() {
+  const text = document.getElementById('jsonStreamBox').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    logConsole('Copied ZMQ JSON feed to clipboard', 'sys');
+  }).catch(() => {
+    logConsole('Failed to copy JSON feed', 'sys');
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// RF Spectrum -- real IQ from Module 1's AIS (7009) / ADS-B (7010) TCP ports.
+// airmaritime_bridge.py reads those the same way bridge_server.py's iq_reader
+// reads the 8 terrestrial ports, and produces a real per-band spectrum.
+// WHICH band the graph shows, though, comes from trueDwellBand -- Module 1's
+// own dwell log, forwarded via wsSched (bridge_server.py). An earlier version
+// picked the band from RMS/signal-threshold alone, which made AIS look dead
+// next to ADS-B: AIS's 162 MHz noise floor sits under the "signal" threshold
+// almost always, ADS-B's 1090 MHz ambient RF usually doesn't, so AIS was
+// genuinely being dwelled on and just never crossed the bar. Signal presence
+// (airBandLive[key].active) is still real and still shown -- just as a
+// secondary "is anything actually on the air" cue, not as the dwell signal.
+// Only ONE graph is added here, matching the terrestrial console's spectrum
+// panel (black canvas, single yellow trace, white grid/axis) -- no waterfall,
+// no time-domain.
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+const AIRMAR_BANDS = [
+  { key: 'ais',  name: 'AIS',   freq: 162.000,  samp_rate_hz: 250000  },   // router port: 162.000 MHz at 0 Hz
+  { key: 'adsb', name: 'ADS-B', freq: 1090.000, samp_rate_hz: 200000  },   // real CH2 rate
+];
+const AIR_FFT_N = 512;
+const airSpecBins = {
+  ais:  new Float32Array(AIR_FFT_N).fill(-180),
+  adsb: new Float32Array(AIR_FFT_N).fill(-180),
+};
+// airBandLive tracks REAL SIGNAL PRESENCE per band (RMS above the display
+// threshold, from airmaritime_bridge.py's own IQ) -- informational only.
+// Which band the graph actually SHOWS is a separate question, answered by
+// trueDwellBand (Module 1's own dwell log, via wsSched -- see its onmessage
+// above): AIS can be genuinely dwelling with nothing but its noise floor,
+// which never crosses the signal threshold, and that must still show up as
+// "AIS, dwelling, quiet" rather than falling back to whatever ADS-B last did.
+const airBandLive = { ais: { active: false, t: 0 }, adsb: { active: false, t: 0 } };
+let trueDwellBand = null;
+let trueDwellT = 0;
+
+const airSpecCv = document.getElementById('cvAirSpectrum');
+const airSpecCtx = airSpecCv.getContext('2d');
+
+function resizeAirSpec() {
+  const box = document.getElementById('boxAirSpectrum');
+  const r = box.getBoundingClientRect();
+  airSpecCv.width = Math.max(1, r.width * devicePixelRatio);
+  airSpecCv.height = Math.max(1, r.height * devicePixelRatio);
+  airSpecCv.style.width = r.width + 'px';
+  airSpecCv.style.height = r.height + 'px';
+}
+window.addEventListener('resize', resizeAirSpec);
+
+function handleAirSpectrum(msg) {
+  const b = AIRMAR_BANDS.find(x => x.key === msg.band);
+  if (!b) return;
+  // msg.active here means "real signal above the display threshold", NOT
+  // "this band is the one being dwelled on" -- see trueDwellBand for that.
+  airBandLive[msg.band] = { active: !!msg.active, t: performance.now() };
+  if (Array.isArray(msg.spectrum)) airSpecBins[msg.band] = Float32Array.from(msg.spectrum);
+
+  // State column: DWELLING (Module 1's own schedule, authoritative) vs
+  // whether that dwell actually has a signal on it right now (informational).
+  const rowSel = msg.band === 'ais' ? '#signalsTable tbody tr:nth-child(1) td:nth-child(3)'
+                                     : '#signalsTable tbody tr:nth-child(2) td:nth-child(3)';
+  const stateCell = document.querySelector(rowSel);
+  if (stateCell) {
+    const dwelling = trueDwellBand === msg.band && (performance.now() - trueDwellT) < 3000;
+    if (dwelling && msg.active) { stateCell.textContent = 'SIGNAL (dwelling)'; stateCell.style.color = 'var(--ok)'; }
+    else if (dwelling) { stateCell.textContent = 'dwelling (quiet)'; stateCell.style.color = 'var(--warn)'; }
+    else { stateCell.textContent = 'idle'; stateCell.style.color = 'var(--text-mute)'; }
+  }
+}
+
+function drawAirSpectrum() {
+  const box = document.getElementById('boxAirSpectrum');
+  const r = box.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4) return;
+  const ctx = airSpecCtx;
+  ctx.save();
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.clearRect(0, 0, r.width, r.height);
+  ctx.fillStyle = css('--plot-bg'); ctx.fillRect(0, 0, r.width, r.height);
+
+  // Show whichever band Module 1 is ACTUALLY dwelling on (trueDwellBand,
+  // from its own schedule log -- authoritative, not a signal-strength
+  // guess). Hold the last-known band through a short gap rather than
+  // blanking between dwells; only fall back to AIS if nothing has dwelled
+  // yet at all (e.g. right after startup).
+  let key = trueDwellBand;
+  if (!key || (performance.now() - trueDwellT) > 4000) {
+    key = trueDwellBand || 'ais';
+  }
+  const band = AIRMAR_BANDS.find(x => x.key === key) || AIRMAR_BANDS[0];
+  const halfSpanMHz = (band.samp_rate_hz / 1e6) / 2;
+  const min = band.freq - halfSpanMHz, max = band.freq + halfSpanMHz;
+
+  ctx.strokeStyle = css('--plot-grid'); ctx.lineWidth = 1; ctx.font = '9px monospace';
+  ctx.fillStyle = css('--plot-axis');
+  for (let db = -100; db <= -10; db += 10) {
+    const y = r.height - ((db + 110) / 100) * r.height;
+    ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(r.width - 30, y); ctx.stroke();
+    if (db % 20 === 0) { ctx.fillText(String(db), 3, y - 2); ctx.fillText(String(db), r.width - 24, y - 2); }
+  }
+  ctx.fillText('dBm', 3, 10);
+  const stepMHz = (halfSpanMHz * 2) > 1 ? 0.5 : 0.05;
+  for (let f = Math.ceil(min / stepMHz) * stepMHz; f <= max; f += stepMHz) {
+    const x = ((f - min) / (max - min)) * r.width;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, r.height); ctx.stroke();
+    ctx.fillText(f.toFixed(3) + ' MHz', x + 2, 10);
+  }
+
+  const dwelling = trueDwellBand === key && (performance.now() - trueDwellT) < 3000;
+  const live = airBandLive[key];
+  const hasSignal = dwelling && live && live.active && (performance.now() - live.t) < 1500;
+  ctx.fillStyle = dwelling ? css('--plot-region-a') : css('--plot-region');
+  ctx.fillRect(0, 0, r.width, r.height);
+  ctx.fillStyle = hasSignal ? '#7dff7d' : (dwelling ? '#ffe800' : 'rgba(255,255,255,0.6)');
+  ctx.font = '11px monospace'; ctx.textAlign = 'center';
+  const label = hasSignal ? 'DWELLING NOW — SIGNAL' : (dwelling ? 'DWELLING NOW — quiet' : 'not tuned');
+  ctx.fillText(band.name + '  •  ' + label, r.width / 2, 24);
+  ctx.textAlign = 'left';
+
+  // ONE yellow trace, same convention as the terrestrial console.
+  ctx.strokeStyle = css('--plot-trace'); ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  const bins = airSpecBins[key];
+  let pen = false;
+  for (let i = 0; i < bins.length; i++) {
+    const db = bins[i];
+    if (db <= -175) { pen = false; continue; }
+    const f = min + (i / bins.length) * (max - min);
+    const x = ((f - min) / (max - min)) * r.width;
+    const y = r.height - ((db + 110) / 100) * r.height;
+    if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  const lbl = document.getElementById('airSpecLbl');
+  if (lbl) lbl.textContent = `RF Spectrum — ${band.name} ${band.freq.toFixed(3)} MHz`;
+  const frd = document.getElementById('freqRead');
+  if (frd) frd.textContent = band.freq.toFixed(6) + ' MHz' + (act ? '  [ACTIVE]' : '');
+  let pk = -999;
+  for (const v of bins) if (v > pk) pk = v;
+  const fx = document.getElementById('fMax'), fn = document.getElementById('fMin');
+  if (fx) fx.textContent = pk > -179 ? pk.toFixed(0) + ' dB' : '—';
+  if (fn) fn.textContent = '—';
+}
+
+resizeAirSpec();
+requestAnimationFrame(function airLoop() { try { drawAirSpectrum(); } catch (e) {} requestAnimationFrame(airLoop); });
+
+connectWS();
+connectSchedWS();
+</script>
+</body>
+</html>

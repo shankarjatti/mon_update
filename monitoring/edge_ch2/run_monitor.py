@@ -206,6 +206,20 @@ def build(args):
                       senv, REPO, "%s/allinone.log" % LOGDIR, grace=10.0, stall=25.0,
                       after=("ch2_router",)))
 
+    # 6b) Air & Maritime (AIS / ADS-B) = the old repo terrestrial_src's chain, unchanged, on CH2:
+    #     5202 -> ch2_airmar_router (TCP 7009 AIS 250 kS/s @162.000, 7010 ADS-B) -> airmaritime_decoder_live
+    #     (ZMQ 9201/9202) -> airmaritime_bridge (ws 8887) -> console (http 8789). Terrestrial pieces untouched.
+    comps.append(Comp("airmar_router", ["python3", "-u", "ch2_airmar_router.py", "--in", "tcp://127.0.0.1:5202"],
+                      senv, EDGE, "%s/airmar_router.log" % LOGDIR, port=7009, grace=5.0))
+    comps.append(Comp("airmar_decoder", ["python3", "-u", "airmar_decoder_ext.py"],
+                      senv, EDGE, "%s/airmar_decoder.log" % LOGDIR, grace=10.0, stall=25.0,
+                      after=("airmar_router",)))
+    comps.append(Comp("airmar_bridge", ["python3", "-u", "airmar_bridge_ext.py"],
+                      senv, EDGE, "%s/airmar_bridge.log" % LOGDIR, port=8887, grace=5.0))
+    comps.append(Comp("airmar_http", ["python3", "-m", "http.server", "8789", "--bind", "127.0.0.1"],
+                      senv, os.path.join(EDGE, "airmar_console"), "%s/airmar_http.log" % LOGDIR,
+                      port=8789, grace=3.0))
+
     # 7) live decoded voice to the PC speakers
     comps.append(Comp("terr_audio", ["python3", "-u", "terr_audio_play.py",
                       "--squelch", str(args.squelch), "--vol", str(args.vol)],

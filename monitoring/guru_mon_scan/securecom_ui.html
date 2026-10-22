@@ -329,7 +329,7 @@ const REPO = (location.protocol==='file:')
   ? "file:///home/shankar/radar2/terrestrial_src"
   : "/terrestrial_src";
 const TERR_SRC = { land: "http://127.0.0.1:8788/securecom_gui.html?v=" + Date.now(),
-                   air: REPO+"/airmaritime_console.html" };
+                   air: "http://127.0.0.1:8789/airmaritime_console.html?v=" + Date.now() };   // old repo's air/maritime console, X310 copy (edge_ch2/airmar_console)
 document.getElementById('view-terr').innerHTML = `
   <h1>Terrestrial Radio — CH2</h1>
   <div class="sub">USRP-2945 TwinRX A/RX2 · 200 kS/s per band · CH2 scan / auto lock → header router → allinone.py decoder</div>
