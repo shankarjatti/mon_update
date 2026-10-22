@@ -19,7 +19,7 @@ decisions taken, and what comes next. Only measured facts; anything not verified
 | **Run monitoring** | `sudo nmcli connection up usrp` (NIC must be 192.168.10.1/24) → X310 on, 4 antennas → `cd ~/radar2/edge_ch2 && python3 -u run_monitor.py --gain 25 --ch2-gain 10 --samp-rate 1e6 --squelch -45` → UI http://127.0.0.1:8099/securecom_ui.html → stop with ONE Ctrl-C. Checked 2026-10-22 (files, toolchain, modules, ports; hardware not run) |
 | **CH1 — APPLIED 2026-10-22 ("update all things related to cha 1")** | DroneID listen = 2000 ms dwell (frame 14,256 ms, 47 looks: conventional ×10 [Wi-Fi 2.4 / 5.2 / 5.8 / LoRa SF7] + DroneID ×1 + unconventional ×2 [433 / FPV 1080–1280 / Video 5645–5945]); CH1 UI graphs rebuilt (GNU Radio style); `samp_rate` added to every published header (also fixed the CH2 router rate bug). Details: the 2026-10-22 13:xx entry |
 | **PENDING EDITS — NOT APPLIED (user: "I tell all edits at once")** | **CH1 still open:** DroneID listen FREQUENCY (placeholder 2442 MHz); detector = peak over the whole dwell (suggested, NOT approved; affects every channel). **CH2, CH3, CH4 — not reviewed yet** (known: CH3 dwell 160 and CH4 dwell 20 are the sim's look totals, switch counted twice; CH2 gaps listed below). The UI "Monitoring Backend" copy of CH2–CH4 is still the old saved list |
-| **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) no proof yet of one correct terrestrial decode; (7) **CH2 power is dominated by the DC spur (≈ 100 % within ±3 kHz of DC, −57 dBFS on every band) → floor is the spur**; (8) CH2 console centres ≠ scan plan, saves a .wav per dwell, shows "B210"; (9) UI ACTIVE flag always on (bridge floor bug); (10) load ≈ 10 on 12 cores. See the 2026-10-22 entries (12:0x, 11:5x) |
+| **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) no proof yet of one correct terrestrial decode; (7) **CH2 power is dominated by the DC spur (≈ 100 % within ±3 kHz of DC, −57 dBFS on every band) → floor is the spur**; (8) CH2 console centres ≠ scan plan, saves a .wav per dwell, shows "B210"; (9) UI ACTIVE flag always on (bridge floor bug); (10) load ≈ 10 on 12 cores; (11) **RX1 ports (CH1, CH3) have a huge DC offset (−6 / −8 dBFS) and ≈ 30 dB more noise than the RX2 ports; the CH1 centre spike is DC, not a signal; the scanner's detector still counts the DC so CH1 can hardly read ACTIVE** (see the 14:xx entry). See the 2026-10-22 entries (12:0x, 11:5x) |
 | **DF side of the design (`~/radar2/monitoring_sim.html`)** | NOT built: request path, priority scheduler (drone ×5 / others ×2), manual approve, emergency, DF Pub-Sub + AOA. Only the MON↔DF switch itself is proven (guru_switch). Field calibration with real antennas still undecided |
 | Working system | **guru_switch** (`~/radar2/guru_switch`, `./run_hop.sh --switch`): DF (shared LO, 2.4 → 5.2 → 5.8 GHz, 7 ms switching + 5 ms dwell, burst, 2 MS/s) + MON (own LO per channel: ch0 900 MHz, ch1 2.4, ch2 5.2, ch3 5.8 GHz, ONE continuous stream) in one program; mode changed ONLY by hand with the MODE selector (control API off by default) |
 | Proven | DF phase after returning from MON ≤ 0.33° (same as a plain retune); switch ~20–33 ms request → first dwell; 30-min run 2026-09-30 18:12–18:42: 0 TIMING LOST, 0 errors, HackRF 0 stalls |
@@ -54,6 +54,27 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 ---
 
 ## 2026-10-22
+
+### 2026-10-22 14:xx — user (screenshot of the CH1 UI): "is this UI detecting a signal? if it is in the frequency plot why not in the time graph with the correct offset?" — ANSWER MEASURED: the spike is the receiver's DC offset, not a signal
+* Raw CH1 IQ, 30 s, 16384-point FFT (61 Hz bins), first 12 ms of every look dropped, all 8 CH1 bands (433 MHz … 5.9 GHz): the spike sits at
+  **exactly 0 Hz offset** on every band, 57–59 dB over the median bin, and the sample mean is the same complex number everywhere:
+  I ≈ −0.31, Q ≈ −0.31 (|DC| 0.43–0.52 = −7.4 … −5.7 dBFS), stable across looks over 30 s. A constant I/Q value is exactly what a time plot shows
+  as traces shifted away from zero (blue ≈ −0.3, red ≈ −0.3 in the screenshot) — a tone at offset f would show as a sine of frequency f. After
+  subtracting the mean, no peak stands out (12–13 dB over the median bin on 7 bands = noise extremes; DroneID listen 19 dB at +31 kHz in 2 looks —
+  only candidate, not confirmed).
+* **Consequences:** (1) the old UI "rms −5.6 dBFS" was the DC, the real signal level (DC removed) is ≈ −22 dBFS; (2) the scanner's ACTIVE rule
+  (floor + 8 dB) on CH1 would need a signal above full scale → **CH1 can practically never read ACTIVE** (matches: no CH1 ACTIVE line all day);
+  (3) the screenshot status "scanning" (not ACTIVE) was correct.
+* **Port pattern (new, measured via the bridge):** DC offset / noise (DC removed) in dBFS — CH1 A/RX1 gain 25: DC −5.8 / −21.7; CH3 B/RX1 gain 25:
+  −7.8 / −22.8; CH4 B/RX2 gain 25: −79.5 / −52.3; CH2 A/RX2 gain 10: −56.5 / −73.3. Both RX1 ports show a huge DC and ≈ 30 dB more noise than the RX2
+  ports at the same gain → something differs on the A/RX1 and B/RX1 paths (antenna / amplifier / bias / port). Cause NOT found; not fixed.
+* **Changed (bridge + UI, verified in the browser):** `mon_ws_bridge.py` now measures the DC offset (`dc_i`, `dc_q`, `dc_dbfs`) and computes rms, floor and
+  ACTIVE on the DC-REMOVED signal; the UI shows a "DC offset … dBFS (I, Q)" chip, "scanning x dBFS without DC", "peak excl. DC" (the DC bins ±3 are
+  skipped) and "signal rms · DC" on the time plot. The spectrum still shows the DC spike (as a GNU Radio sink would). The scanner (`mon_server.py`) detector
+  is NOT changed (still counts the DC) — needs the user's decision.
+* **Options for the DC (not applied, waiting for the user):** (a) DC removal in the receive chain before the detector and the publish (mean-subtract / high-pass,
+  costs ≈ 0 for signals wider than a few kHz); (b) detector on DC-removed power only; (c) tune the LO a few 100 kHz off the wanted band so the spur falls
+  outside it; (d) find why the RX1 ports are so different (hardware).
 
 ### 2026-10-22 13:xx — user: "update all things related to cha 1" · CH1 UI like GNU Radio graphs, draggable, AOA polar zero, no dummy data · "conventional 10 cycles, 1 DroneID, 2 unconventional" — DONE and VERIFIED on the X310
 * **Scan plan:** `scan_plan.py` DroneID listen 2010 → **2000 ms** (+10 ms switch). Frame now 14,256 ms = 10 × 1,065 + 2,010 + 2 × 798, 47 looks.

@@ -194,6 +194,7 @@ function signalViewHTML(cfg){
       <span class="chip ok">Band <b id="${cfg.id}-band">—</b></span>
       <span class="chip">Center <b id="${cfg.id}-cf">—</b></span>
       <span class="chip">Span <b id="${cfg.id}-span">—</b></span>
+      <span class="chip warn" id="${cfg.id}-dc" title="Receiver DC offset: a constant I/Q value, shows as a spike exactly at the centre frequency. It is NOT a received signal.">DC offset <b>—</b></span>
       <span class="chip" id="${cfg.id}-stat">● waiting for data</span>
     </div>
     <div class="chips">
@@ -477,7 +478,7 @@ function fftData(m,st){
   let mh=st.mhmap[key];
   if(!mh||mh.length!==n){ mh=st.mhmap[key]=Float32Array.from(m.spectrum); }
   else for(let i=0;i<n;i++) if(m.spectrum[i]>mh[i]) mh[i]=m.spectrum[i];
-  let pk=0; for(let i=1;i<n;i++) if(m.spectrum[i]>m.spectrum[pk]) pk=i;
+  const c0=n>>1; let pk=-1; for(let i=0;i<n;i++){ if(Math.abs(i-c0)<=3) continue; if(pk<0||m.spectrum[i]>m.spectrum[pk]) pk=i; }   // peak EXCLUDING the DC bins
   const series=[]; if(st.hold) series.push({y:mh,color:'#e02424',ghost:true});
   series.push({y:m.spectrum,color:'#1769e0'});
   return {key,n,x:i=>f0+i*df,xfull:[f0,f0+n*df],series,peak:pk,
@@ -549,7 +550,8 @@ function updateChips(k,m){
   document.getElementById(cf.id+'-cf').textContent=m.freq_mhz.toFixed(m.freq_mhz<1000?3:1)+' MHz';
   document.getElementById(cf.id+'-span').textContent=(m.samp_rate/1e6).toFixed(2)+' MHz ('+m.nfft+'-pt FFT)';
   const stat=document.getElementById(cf.id+'-stat'), tag=age>2.5?' · last data '+age.toFixed(1)+' s ago':'';
-  stat.textContent=(m.active?'● ACTIVE ':'● scanning ')+m.rms_dbfs+' dBFS (floor '+m.floor_dbfs+')'+tag;
+  stat.textContent=(m.active?'● ACTIVE ':'● scanning ')+m.rms_dbfs+' dBFS without DC (floor '+m.floor_dbfs+')'+tag;
+  const dcEl=document.querySelector('#'+cf.id+'-dc b'); if(dcEl&&m.dc_dbfs!=null) dcEl.textContent=m.dc_dbfs+' dBFS (I '+m.dc_i+', Q '+m.dc_q+')';
   stat.className='chip '+(age>2.5?'warn':(m.active?'bad':'good'));
 }
 
@@ -584,8 +586,8 @@ function loop(ts){
         if(m!==st.lastMsg){
           st.lastMsg=m;
           const fd=fftData(m,st); st.gf.setData(fd); st.gt.setData(timeData(m)); drawIQ(st.iq,m);
-          document.getElementById(cf.id+'-pk').textContent='peak '+m.spectrum[fd.peak].toFixed(1)+' dBFS @ '+fd.x(fd.peak).toFixed(4)+' MHz';
-          document.getElementById(cf.id+'-tv').textContent='rms '+m.rms_dbfs+' dBFS';
+          document.getElementById(cf.id+'-pk').textContent='peak excl. DC '+m.spectrum[fd.peak].toFixed(1)+' dBFS @ '+fd.x(fd.peak).toFixed(4)+' MHz';
+          document.getElementById(cf.id+'-tv').textContent='signal rms '+m.rms_dbfs+' dBFS · DC '+m.dc_dbfs+' dBFS';
           document.getElementById(cf.id+'-pv').textContent=m.active?'signal':'noise';
         }
         tickDetections(k);

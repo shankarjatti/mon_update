@@ -35,7 +35,7 @@ RING = 8192                 # samples kept per channel for the current look
 MIN_PUSH = 4096             # push only when the look has this many settled samples (4 ms at 1 MS/s)
 PUSH_HZ = 5.0               # per-channel UI update rate
 SETTLE_S = 0.012            # drop the first 12 ms of a look: 10 ms retune/switch + margin
-ACTIVE_MARGIN_DB = 8.0      # rms this far above that band's own floor = ACTIVE (same rule as mon_server)
+ACTIVE_MARGIN_DB = 8.0      # rms (DC removed) this far above that band's own floor = ACTIVE
 
 CLIENTS = set()
 # latest per-channel state the ws server pushes (empty until a look has real samples)
@@ -105,7 +105,9 @@ async def chan_reader(ch):
         if db is None:
             continue
         seg = buf[-TIME_N:]
-        rms = float(10 * np.log10(np.mean(np.abs(buf[-4096:]) ** 2) + 1e-15))
+        tail = buf[-4096:]
+        dc = complex(tail.mean())                       # DC offset of the receiver (not a signal)
+        rms = float(10 * np.log10(np.mean(np.abs(tail - dc) ** 2) + 1e-15))   # signal level WITHOUT the DC
         band = hdr.get("band", "")
         fk = (ch, band)
         fl = FLOOR.get(fk)
@@ -117,6 +119,8 @@ async def chan_reader(ch):
             "spectrum": [round(float(v), 1) for v in db],
             "i": [round(float(v), 5) for v in seg.real],
             "q": [round(float(v), 5) for v in seg.imag],
+            "dc_i": round(dc.real, 4), "dc_q": round(dc.imag, 4),
+            "dc_dbfs": round(float(20 * np.log10(abs(dc) + 1e-9)), 1),
             "rms_dbfs": round(rms, 1), "floor_dbfs": round(fl, 1),
             "active": bool(rms > fl + ACTIVE_MARGIN_DB), "t": now,
         }
