@@ -168,6 +168,9 @@ def find_band(ch, name):
     for b in BAND_SETS[ch]:
         if b[0] == name:
             return b
+    for b in FRAMES[ch]():                 # bands that are only in the frame (e.g. DroneID listen)
+        if b[0] == name:
+            return b
     return None
 
 

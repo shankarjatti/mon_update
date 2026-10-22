@@ -17,7 +17,7 @@ decisions taken, and what comes next. Only measured facts; anything not verified
 | **THIS LOG / REPO (user, 2026-10-22)** | **"keep updating on https://github.com/shankarjatti/mon_update always, until I tell you"** → from 2026-10-22 the LIVE log and the monitoring code are updated HERE (`~/radar2/mon_update`, GitHub `mon_update`, PUBLIC, branch `main`). **When (user, same day): "keep updating after every CORRECT result, I will tell you when to stop"** — update after each verified correct result (not after every chat message; an unverified or failed attempt goes in the log only as a failed/open note). Update = edit the lab files → `./sync.sh` → edit this log (entry + CURRENT STATE) → commit → push. Older copy of this log: guru_switch_mon-df (stops at 2026-10-22, has a pointer here). Never publish `main_sched/` (private), recordings, result CSVs, tarballs |
 | **Monitoring (built 2026-10-08…16)** | lab folders `~/radar2/guru_mon_scan` (scanner, scan_plan, pub-sub, UI) + `~/radar2/edge_ch2` (watchdog, UI bridge, CH2 router) + `~/radar2/terrestrial38`, `gr-dsd`, `gr-tetra` (GR 3.8 decoders). 4 channels scan their frames in parallel, own LO each, ZeroMQ PUB 5201–5204, 5-panel UI, activity CSV. Frozen: `guru_mon_scan_v1` / `_v2` (+ `.tar.gz`, `.sha256`), `terrestrial_port_v1.tar.gz` (local). Published here: `monitoring/` (code), `design/` (sim), `docs/`. Details: the 2026-10-08…16 entry and `monitoring/guru_mon_scan/BUILD_LOG.md` |
 | **Run monitoring** | `sudo nmcli connection up usrp` (NIC must be 192.168.10.1/24) → X310 on, 4 antennas → `cd ~/radar2/edge_ch2 && python3 -u run_monitor.py --gain 25 --ch2-gain 10 --samp-rate 1e6 --squelch -45` → UI http://127.0.0.1:8099/securecom_ui.html → stop with ONE Ctrl-C. Checked 2026-10-22 (files, toolchain, modules, ports; hardware not run) |
-| **CH1 — APPLIED 2026-10-22 ("update all things related to cha 1")** | DroneID listen = 2000 ms dwell (frame 14,256 ms, 47 looks: conventional ×10 [Wi-Fi 2.4 / 5.2 / 5.8 / LoRa SF7] + DroneID ×1 + unconventional ×2 [433 / FPV 1080–1280 / Video 5645–5945]); CH1 UI graphs rebuilt (GNU Radio style); `samp_rate` added to every published header (also fixed the CH2 router rate bug). Details: the 2026-10-22 13:xx entry |
+| **CH1 — APPLIED 2026-10-22 ("update all things related to cha 1")** | **Later the same day (15–16 h): DC removal on all channels, sample-accurate detector (look_power, 14 ms skip, 0.5 ms peak, 2.5 dB margin), CH1 band lock from the UI (MON plan / one band), GNU Radio-style graphs + waterfall, binary per-view feed (lag fix), continuous traces — see the 15:xx–16:xx entry.** DroneID listen = 2000 ms dwell (frame 14,256 ms, 47 looks: conventional ×10 [Wi-Fi 2.4 / 5.2 / 5.8 / LoRa SF7] + DroneID ×1 + unconventional ×2 [433 / FPV 1080–1280 / Video 5645–5945]); CH1 UI graphs rebuilt (GNU Radio style); `samp_rate` added to every published header (also fixed the CH2 router rate bug). Details: the 2026-10-22 13:xx entry |
 | **PENDING EDITS — NOT APPLIED (user: "I tell all edits at once")** | **CH1 still open:** DroneID listen FREQUENCY (placeholder 2442 MHz); detector = peak over the whole dwell (suggested, NOT approved; affects every channel). **CH2, CH3, CH4 — not reviewed yet** (known: CH3 dwell 160 and CH4 dwell 20 are the sim's look totals, switch counted twice; CH2 gaps listed below). The UI "Monitoring Backend" copy of CH2–CH4 is still the old saved list |
 | **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) no proof yet of one correct terrestrial decode; (7) **CH2 power is dominated by the DC spur (≈ 100 % within ±3 kHz of DC, −57 dBFS on every band) → floor is the spur**; (8) CH2 console centres ≠ scan plan, saves a .wav per dwell, shows "B210"; (9) UI ACTIVE flag always on (bridge floor bug); (10) load ≈ 10 on 12 cores; (11) **RX1 ports (CH1, CH3) have a huge DC offset (−6 / −8 dBFS) and ≈ 30 dB more noise than the RX2 ports; the CH1 centre spike is DC, not a signal; the scanner's detector still counts the DC so CH1 can hardly read ACTIVE** (see the 14:xx entry). See the 2026-10-22 entries (12:0x, 11:5x) |
 | **DF side of the design (`~/radar2/monitoring_sim.html`)** | NOT built: request path, priority scheduler (drone ×5 / others ×2), manual approve, emergency, DF Pub-Sub + AOA. Only the MON↔DF switch itself is proven (guru_switch). Field calibration with real antennas still undecided |
@@ -54,6 +54,45 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 ---
 
 ## 2026-10-22
+
+### 2026-10-22 15:xx–16:xx — user: "remove DC offset from all channels, all bands should detect when active" · CH1 UI: one band = lock, MON plan = run the plan, all GNU Radio plot options · "graphs lag, not proper" · "continuous signal, not discrete" · "come only for CH1 now" — DONE, VERIFIED on the X310
+* **DC removal, all 4 channels** (`mon_server.py`, right after the radio, before the detector AND the published IQ): y = x − single-pole
+  low-pass(x), alpha 0.001 (≈ 160 Hz high-pass at 1 MS/s), option `--dc-alpha` (0 = off). MEASURED DC left (median): CH1 −6 → **−56 dBFS**,
+  CH3 −8 → −56, CH2 → −116, CH4 → −96. Time plot and constellation now centred on 0. A small near-centre component remains on CH1
+  (≈ −42…−45 dBFS per bin, ≈ 8 dB over the noise, visible in the waterfall) — open.
+* **Detector rebuilt (sample-accurate)** — new block `look_power.py`: starts at each look's stream tag, skips the first 14 ms (10 ms switch +
+  retune transient + 2 ms chunk), peak of 0.5 ms power windows over the rest of the look; mon_server reads it at the end of the dwell.
+  Reason (MEASURED): the PC-timed probe still saw the retune transient — on CH2 98 % and on CH4 almost all of the loud 0.5 ms windows sat in
+  the first 10 ms of a look (broadband, at 0 Hz). Floor = lowest look peak per (channel, band); **ACTIVE margin 8 → 2.5 dB** (quiet-band
+  noise peaks measured within +1.4 dB of the floor). Verdicts published on ZeroMQ 5210 (one JSON per dwell) → bridge → UI detections table.
+  75 s result (2.5 dB, before the 14 ms skip): CH1 quiet bands 5.2 / 5.8 / Video **0 % ACTIVE**, Wi-Fi 2.4 active when Wi-Fi is on air
+  (60 % in one run, real narrow carriers at 2441.98 / 2442.06 MHz seen while locked); CH4 cellular bands 8–57 %; CH3 63–77 % (RX1-port noise
+  −20 dBFS, not yet understood).
+* **CH2 / CH4 events — OPEN (user: "come only for CH1 now")**: short (0.5 ms) broadband bursts at 0 Hz in the middle of looks on CH2 (and CH4).
+  Board-mate retune test: CH1 + CH3 held (no retunes) 15.7 events/s on CH2, all scanning 0.9 events/s → NOT explained by the board-mate
+  retunes; the event rate changes a lot with time. Not radios (radios are long and 12.5 kHz wide). To continue later.
+* **Lag fixed (MEASURED):** load was 11.3 on 12 cores, mon_server 156 % CPU, pipeline stalls up to 257 ms (no UHD overflows — an earlier count of
+  "O" was letters in words, corrected). (1) `mon_pub` works in 2048-sample chunks (was 364-sample network packets, ~2,700 Python calls/s/ch);
+  (2) the bridge sends full graph data only for the channel being viewed, as BINARY (`MON1` + header + float32 spectrum / I / Q) at 10 Hz,
+  other channels a small JSON status at 2 Hz. After: mon_server 89–100 %, bridge 66 → 22–25 %, router 36 → 20 %. Load still 9–14 because of the
+  CH2 decode chain (allinone 72–75 %, backupv1 bridge 25–41 %), kernel workers and the CPU governor `powersave` (user setting).
+* **CH1 band lock (MEASURED end to end):** UI "Receiver" menu = "MON plan — all bands (47 looks, 14.26 s frame)" + every band of the REAL plan
+  (sent by the bridge from `scan_plan.py`, with dwell and count ×10 / ×1 / ×2). Choosing a band → bridge writes `edge_ch2/pin_ch1.txt` →
+  mon_server holds that band (no retune between dwells) — log "[pin] CH1 LOCKED on 'Wi-Fi 2.4 2412-2472'", 6 s of status = that band only;
+  choosing "MON plan" → "[pin] CH1 back to the MON plan", the bands rotate again. `scan_plan.find_band` also finds DroneID listen.
+* **GNU Radio-style graphs (CH1 panel; CH3 / CH4 panels share the code but keep the display-only band filter):** frequency: Run/Stop, FFT size
+  256…8192, window (Hann, Hamming, Blackman, Blackman-Harris, Flat-top, Kaiser, Rectangular — computed in the bridge), averaging Off/Low/Medium/High
+  (0.2 / 0.1 / 0.05), max hold, min hold, clear holds, peak marker, Y min/max, Auto Y, one-shot Autoscale, reset zoom, grid, PNG, CSV;
+  waterfall (new): per-band history 300 rows at 10 rows/s, colormap Turbo/Viridis/Hot/Gray, auto / manual intensity, clear, PNG;
+  time: Run/Stop, points 256…4096, show I+Q / I / Q / |x| / phase, line / dots, trigger Free / Auto / Normal, source I / Q / |x|, level, slope,
+  delay, Y min/max, Auto Y, autoscale, reset, grid, PNG, CSV; constellation: Run/Stop, points, fixed range or auto, grid, PNG; mouse: drag = zoom,
+  wheel = X (shift = Y), shift+drag = pan, double-click = reset, cursor readout. Y stays fixed unless Auto Y (no jitter, like GNU Radio).
+* **Bugs fixed while testing:** the UI loop used requestAnimationFrame, which the browser pauses when the tab/pane is not visible → now a 33 ms
+  timer; zoomed traces were drawn as separate vertical bars ("discrete") because the draw mode looked at all samples, not the visible ones →
+  now always one continuous line (every sample joined when zoomed in, min/max envelope when there are more samples than pixels).
+  Verified in the browser pane: 0 console errors.
+* User's Chrome: press **Ctrl+Shift+R** — the screenshots were from a cached older page.
+* Open (CH1): DroneID listen frequency; RX1-port noise ≈ 30 dB above RX2 (hardware); residual near-centre component; CH2/CH3/CH4 later.
 
 ### 2026-10-22 14:xx — user (screenshot of the CH1 UI): "is this UI detecting a signal? if it is in the frequency plot why not in the time graph with the correct offset?" — ANSWER MEASURED: the spike is the receiver's DC offset, not a signal
 * Raw CH1 IQ, 30 s, 16384-point FFT (61 Hz bins), first 12 ms of every look dropped, all 8 CH1 bands (433 MHz … 5.9 GHz): the spike sits at

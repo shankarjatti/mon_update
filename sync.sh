@@ -9,7 +9,7 @@ M="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$M/monitoring/guru_mon_scan" "$M/monitoring/edge_ch2" "$M/monitoring/terrestrial38" "$M/design" "$M/docs"
 
 for f in scan_plan.py mon_scan.py mon_server.py mon_pub.py mon_sub_example.py mon_scan_retune.py \
-         run_mon_scan.sh securecom_ui.html monitoring_ui.html README_MON_SCAN.md BUILD_LOG.md BLOCK_DIAGRAM.md; do
+         run_mon_scan.sh securecom_ui.html monitoring_ui.html README_MON_SCAN.md BUILD_LOG.md BLOCK_DIAGRAM.md look_power.py; do
   [ -f "$R/guru_mon_scan/$f" ] && cp -p "$R/guru_mon_scan/$f" "$M/monitoring/guru_mon_scan/"
 done
 rsync -a --delete --exclude __pycache__ --exclude ch2_lock.txt --exclude ch2_mode.txt \

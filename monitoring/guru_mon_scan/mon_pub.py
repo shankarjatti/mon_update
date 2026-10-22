@@ -35,6 +35,11 @@ class mon_pub(gr.sync_block):
                       "frame": 0, "host_time": time.time(),
                       "samp_rate": self.samp_rate}
         self._pending_tag = True
+        # work() in chunks of 2048 samples (2 ms at 1 MS/s) instead of the 364-sample network packets:
+        # ~7x fewer Python calls and ZeroMQ messages per channel (measured: 364-sample blocks pushed the
+        # scanner to 156 % CPU, load 11 on 12 cores, UHD overflows). Look tags land on these chunk
+        # boundaries, so the detector settle time covers +2 ms (see mon_server SETTLE_S).
+        self.set_output_multiple(2048)
         if self.publish:
             self._ctx = zmq.Context.instance()
             self._sock = self._ctx.socket(zmq.PUB)
@@ -54,6 +59,11 @@ class mon_pub(gr.sync_block):
                           "host_time": time.time(),
                           "samp_rate": self.samp_rate}
             self._pending_tag = True
+
+    def current_host_time(self):
+        """host_time of the look set last (the key look_power uses for that look)."""
+        with self._lock:
+            return self._look["host_time"]
 
     def _tag_dict(self, d):
         t = pmt.make_dict()
