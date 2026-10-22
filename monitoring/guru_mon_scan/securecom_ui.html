@@ -124,6 +124,24 @@
   .grpair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .grpair .grpanel{width:150px;flex:0 0 150px}
   @media(max-width:1200px){.grpair{grid-template-columns:1fr}}
+  /* one-frame dashboard: all plots on one screen, tiles swap by dragging their title bar */
+  .main{max-width:none}
+  .grgrid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr) 128px;gap:8px;margin-top:8px}
+  .grslot{min-height:0;min-width:0;display:flex}
+  .grslot[data-slot="1"]{grid-column:1;grid-row:1}
+  .grslot[data-slot="2"]{grid-column:1;grid-row:2}
+  .grslot[data-slot="3"]{grid-column:2;grid-row:1}
+  .grslot[data-slot="4"]{grid-column:2;grid-row:2}
+  .grslot[data-slot="5"]{grid-column:1/-1;grid-row:3}
+  .grslot.drop{outline:2px dashed #1769e0;outline-offset:1px}
+  .grgrid .grsink{margin-top:0;flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+  .grgrid .grbody{flex:1;min-height:0}
+  .grgrid .grplot{min-height:0}
+  .grgrid .grpanel{overflow:auto;max-height:100%}
+  .grgrid .grpanel{width:190px;flex:0 0 190px}
+  .grtitle[draggable=true]{cursor:move;user-select:none}
+  .grtable{flex:1;min-height:0;overflow:auto;background:#fff;border:1px solid #c9c9c9}
+  .grtable table{margin:0;font-size:12px}
 </style>
 </head>
 <body>
@@ -213,6 +231,7 @@ document.querySelectorAll('.navbtn').forEach(btn=>btn.onclick=()=>{
   document.getElementById('activeTag').classList.toggle('red', curView==='imsi');
   if(S[curView]){ S[curView].lastMsg=null; S[curView]._aoa=0; }
   sendView();
+  document.scrollingElement.scrollTop=0; setTimeout(fitGrid,0);
 });
 
 /* =================== SIGNAL-VIEW SCAFFOLD (FFT / TIME / POLAR) =================== */
@@ -240,35 +259,33 @@ function signalViewHTML(cfg){
       <span class="chip warn" id="${id}-dc" title="Receiver DC offset left after DC removal">DC <b>—</b></span>
       <span class="chip" id="${id}-stat">● waiting for data</span>
     </div>
-    <div class="chips">${lock}</div>
+    <div class="chips">${lock}<button id="${id}-relayout" title="put the plots back in their default places">Reset layout</button></div>
   </div>
-  <div class="grsink"><div class="grtitle">Frequency Sink <b id="${id}-pk"></b><button class="grcp" id="${id}-cp-f" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
-    <div class="grplot" style="min-height:360px"><canvas id="${id}-fft" class="grcv"></canvas></div>
+  <div class="grgrid" id="${id}-grid">
+    <div class="grslot" data-slot="1"><div class="grsink" id="${id}-tile-f"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Frequency Sink <b id="${id}-pk"></b><button class="grcp" id="${id}-cp-f" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
+    <div class="grplot"><canvas id="${id}-fft" class="grcv"></canvas></div>
     <div class="grpanel" id="${id}-pan-f" style="display:none">
       ${grp('Trace Options', cb('fmax','Max Hold',false)+cb('fmin','Min Hold',false)+`<div class="grrow"><span>Avg:</span><input type="range" class="grslider" id="${id}-favg" min="1" max="100" value="100"></div>`)}
       ${grp('Axis Options', cb('fgrid','Grid',false)+cb('fax','Axis Labels',true)+pm('fyr','Y Range')+pm('fref','Ref Level')+btn('fauto','Autoscale'))}
       ${grp('FFT', sel('nfft',NF,1024)+sel('win',WIN,'blackmanharris'))}
       ${grp('Trigger', sel('ftm',[['free','Free'],['auto','Auto'],['normal','Normal']],'free')+pm('flev','Level'))}
       ${grp('Extras', btn('fstop','Stop')+btn('fpng','Save Image')+btn('fcsv','Export CSV'))}
-    </div></div></div>
-  <div class="grsink"><div class="grtitle">Time Sink <b id="${id}-tv"></b><button class="grcp" id="${id}-cp-t" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
-    <div class="grplot" style="min-height:340px"><canvas id="${id}-time" class="grcv"></canvas></div>
+    </div></div></div></div>
+    <div class="grslot" data-slot="2"><div class="grsink" id="${id}-tile-t"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Time Sink <b id="${id}-tv"></b><button class="grcp" id="${id}-cp-t" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
+    <div class="grplot"><canvas id="${id}-time" class="grcv"></canvas></div>
     <div class="grpanel" id="${id}-pan-t" style="display:none">
       ${grp('Axes', cb('tauto','Autoscale',false)+cb('tgrid','Grid',false)+cb('tax','Axis Labels',true)+pm('tyo','Y Offset')+pm('tyr','Y Range')+pm('txm','X Max'))}
       ${grp('Trigger', sel('ttm',[['free','Free'],['auto','Auto'],['normal','Normal']],'free')+sel('tsl',[['pos','Positive'],['neg','Negative']],'pos')+sel('tch',[['0','Data 0 (I)'],['1','Data 1 (Q)']],'0')+pm('tlev','Level')+pm('tdel','Delay'))}
       ${grp('Extras', btn('tone','Autoscale')+btn('tstop','Stop')+btn('tpng','Save Image')+btn('tcsv','Export CSV'))}
-    </div></div></div>
-  <div class="grpair">
-  <div class="grsink"><div class="grtitle">Constellation Sink <b id="${id}-pv"></b><button class="grcp" id="${id}-cp-c" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
-    <div class="grplot" style="min-height:330px"><canvas id="${id}-iq" class="grcv"></canvas></div>
+    </div></div></div></div>
+    <div class="grslot" data-slot="3"><div class="grsink" id="${id}-tile-c"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Constellation Sink <b id="${id}-pv"></b><button class="grcp" id="${id}-cp-c" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
+    <div class="grplot"><canvas id="${id}-iq" class="grcv"></canvas></div>
     <div class="grpanel" id="${id}-pan-c" style="display:none">
       ${grp('Axes', cb('cauto','Autoscale',false)+cb('cgrid','Grid',false)+cb('cax','Axis Labels',true)+pm('cr','Range'))}
       ${grp('Extras', btn('cstop','Stop')+btn('cpng','Save Image'))}
-    </div></div></div>
-  <div class="grsink"><div class="grtitle">AOA — polar (azimuth) <b>0 bearings</b></div><div class="grbody"><div class="grplot" style="min-height:330px"><canvas id="${id}-polar" class="grcv"></canvas></div></div></div>
-  </div>
-  <div class="plot" style="margin-top:12px"><h3>${cfg.tableTitle} <b id="${id}-cnt">0</b></h3>
-    <table class="det"><thead>${cfg.tableHead}</thead><tbody id="${id}-tbody"></tbody></table>
+    </div></div></div></div>
+    <div class="grslot" data-slot="4"><div class="grsink" id="${id}-tile-a"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">AOA — polar (azimuth) <b>0 bearings</b></div><div class="grbody"><div class="grplot"><canvas id="${id}-polar" class="grcv"></canvas></div></div></div></div>
+    <div class="grslot" data-slot="5"><div class="grsink" id="${id}-tile-d"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">${cfg.tableTitle} <b id="${id}-cnt">0</b></div><div class="grtable"><table class="det"><thead>${cfg.tableHead}</thead><tbody id="${id}-tbody"></tbody></table></div></div></div>
   </div>`;
 }
 
@@ -795,6 +812,37 @@ function loop(ts){
 }
 setInterval(()=>{ try{ loop(performance.now()); }catch(e){ console.error('loop',e); } }, 33);
 window.addEventListener('resize',()=>{ for(const k in S){ S[k].gf.draw(); S[k].gt.draw(); S[k].gc.draw(); S[k]._aoa=0; S[k].lastMsg=null; } });
+/* ---- one-frame layout: fit the grid to the window; tiles swap by dragging their title bar ---- */
+const TILE_ORDER=['tile-f','tile-t','tile-c','tile-a','tile-d'];
+function layoutKey(id){ return 'securecom.layout.'+id; }
+function saveLayout(id,slots){ try{ localStorage.setItem(layoutKey(id),JSON.stringify(slots.map(s=>{ const c=s.querySelector('.grsink'); return c?c.id:''; }))); }catch(e){} }
+function applyOrder(slots,ids){ ids.forEach((tid,i)=>{ const t=document.getElementById(tid); if(t&&slots[i]) slots[i].appendChild(t); }); }
+function redrawAll(){ for(const k in S){ S[k].lastMsg=null; S[k]._aoa=0; } setTimeout(()=>{ for(const k in S){ S[k].gf.draw(); S[k].gt.draw(); S[k].gc.draw(); } },0); }
+function setupGrid(k){
+  const id=SIGVIEWS[k].id, grid=document.getElementById(id+'-grid'); if(!grid) return;
+  const slots=[...grid.querySelectorAll('.grslot')];
+  try{ const saved=JSON.parse(localStorage.getItem(layoutKey(id))||'null'); if(Array.isArray(saved)&&saved.length===slots.length&&saved.every(x=>document.getElementById(x))) applyOrder(slots,saved); }catch(e){}
+  grid.querySelectorAll('.grtitle[draggable]').forEach(h=>h.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain',h.closest('.grsink').id); e.dataTransfer.effectAllowed='move'; }));
+  slots.forEach(sl=>{
+    sl.addEventListener('dragover',e=>{ e.preventDefault(); sl.classList.add('drop'); });
+    sl.addEventListener('dragleave',()=>sl.classList.remove('drop'));
+    sl.addEventListener('drop',e=>{ e.preventDefault(); sl.classList.remove('drop');
+      const tile=document.getElementById(e.dataTransfer.getData('text/plain')); if(!tile||tile.parentElement===sl) return;
+      const from=tile.parentElement, other=sl.querySelector('.grsink'); sl.appendChild(tile); if(other) from.appendChild(other);
+      saveLayout(id,slots); redrawAll(); });
+  });
+  const rb=document.getElementById(id+'-relayout');
+  if(rb) rb.onclick=()=>{ applyOrder(slots,TILE_ORDER.map(x=>id+'-'+x)); try{ localStorage.removeItem(layoutKey(id)); }catch(e){} redrawAll(); };
+}
+function fitGrid(){
+  const cf=SIGVIEWS[curView]; if(!cf) return; const g=document.getElementById(cf.id+'-grid'); if(!g) return;
+  const top=g.getBoundingClientRect().top+document.scrollingElement.scrollTop;
+  g.style.height=Math.max(560,window.innerHeight-top-10)+'px'; redrawAll();
+}
+for(const k in SIGVIEWS) setupGrid(k);
+window.addEventListener('resize',fitGrid);
+setTimeout(fitGrid,0);
+
 
 /* =================== BACKEND CONFIG VIEW (unchanged logic) =================== */
 function repOf(b){ return Number(b.rep)>0?Number(b.rep):1; }

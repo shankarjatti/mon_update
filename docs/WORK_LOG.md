@@ -55,6 +55,14 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 17:5x — user: "I should see all plots in 1 frame, and all plots should be draggable" — DONE, checked
+* CH1 view is a one-screen dashboard: grid sized to the window (Frequency + Time wide on the left, Constellation + AOA on the right,
+  Detections row at the bottom); page width no longer capped. Checked at 1850 × 930 (the user's Chrome size): everything visible, no scrolling.
+* Tiles are draggable: drag a plot's title bar onto another plot → they swap places (plots redraw at the new size); the layout is
+  remembered in that browser (localStorage, per-viewer convenience only); "Reset layout" restores the default. Inside a plot, drag still zooms.
+  Checked: Constellation dropped on the Frequency place → swapped (Constellation 1039 px wide, Frequency 512 px), saved; Reset → default order.
+  0 console errors. Same layout code serves the CH3 / CH4 panels.
+
 ### 2026-10-22 17:3x — user: "those options should show only when I click a control panel option" — DONE, checked
 * As GNU Radio (control panel off by default): every sink (Frequency, Time, Constellation) starts with its control panel HIDDEN and the plot at
   full width; a "Control Panel" button in each sink's title bar shows / hides that sink's panel. Checked in the browser: hidden → plot 747 px;
