@@ -53,6 +53,28 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 11:5x — user: "RUN THAT monitoring work and show me UI result … in chrome … I have connected 2945" — RAN ON THE X310: OK
+* Before: NIC `enp3s0` = 192.168.10.1/24 (profile `usrp` active), X310 ping 0.63 ms, ports free.
+* Started `run_monitor.py --gain 25 --ch2-gain 10 --samp-rate 1e6 --squelch -45` (log `/tmp/run_monitor.log`):
+  all 8 parts up in ≈ 30 s (`[watchdog] all up`), **0 restarts, 0 errors / tracebacks in `mon_server.log`**,
+  `[hb] alive` every 5 s, ports 5201–5204 (PUB), 7001, 8099 (UI), 8780 (ws), 8787, 8788 listening.
+  Load average rose to ≈ 6.8 after start (watch for stalls in a long run — not yet run long today).
+* UI feed read directly on ws 8780 (12 s): all 4 channels deliver real data every push — 256-point spectrum,
+  256-point time envelope, 160 IQ points (CH1 LoRa 865-928, CH2 NXDN 451.0, CH3 C 5400-5900, CH4 2G 925.2-934.8).
+  `securecom_ui.html` and the CH2 console (:8788) answer HTTP 200. The CH2 router routes blocks to all 4 decoder ports.
+* Scanner `[ACTIVE]` after the first minute: CH4 busy on every cellular downlink band (B5 869-894 strongest,
+  −23 dBFS; B40 −21, B28 −35); CH2 saw DMR 446.100 (−19), NXDN 451.0 (−20), P25 450.0 (−26), TETRA 420.0 (−40),
+  D-STAR 145.0 (one reading at −3.6 dBFS, close to clipping); CH1 and CH3 had no ACTIVE line (quiet by the
+  scanner rule: floor + 8 dB).
+* **Browser:** the Claude-in-Chrome extension was NOT connected, so I could not drive or screenshot Chrome; the UI
+  was opened in the default browser with `xdg-open` (not confirmed on screen by me).
+* **New bug found (visible in the UI feed):** `edge_ch2/mon_ws_bridge.py` starts its rolling floor at −120 dBFS and
+  only raises it when `rms < floor + 8` → never true, so the floor stays −120 and **every channel is marked
+  active=True all the time** (e.g. CH2 at −55.7 dBFS, floor −120). The UI "ACTIVE" is therefore wrong; the scanner's
+  own `[ACTIVE]` log (its own floor per band) is the right one. Fix proposed (floor from the first readings / track
+  the minimum), not done yet — waiting for the user's go.
+* Mode: CH2 came up in Mode 1 (scan all bands); `ch2_mode.txt` can hold `auto` from an earlier session.
+
 ### 2026-10-22 11:4x — user: "https://github.com/shankarjatti/mon_update — keep updating on this github repo always … until I tell you"
 * Repo found EMPTY and PUBLIC; `gh` logged in as shankarjatti. Published a curated first set (41 files, 436 KB):
   `monitoring/guru_mon_scan` (scanner, `scan_plan.py`, `mon_pub.py`, UI, `BUILD_LOG.md`), `monitoring/edge_ch2`
