@@ -55,6 +55,24 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 18:3x–19:xx — user: "CH1: I can set the receiving gain … signal not strong, do we need more gain?" · "we are generating 5.785 GHz with a signal generator — check it is detected, I should see it clearly"
+* **CH1 RX gain from the UI (live):** UI "RX gain [ ] dB / Set gain / applied … dB" (CH1) → bridge `gain` command → `edge_ch2/gain_ch1.txt` →
+  mon_server applies it at the next look (clamped to the radio range, reported 0…99 dB) and RESETS that channel's band floors (else every
+  band reads ACTIVE after a gain increase); the applied gain is in every detection verdict (`gain_db`). Verified: log "[gain] CH1 RX gain ->
+  65.0 dB (UI); band floors of CH1 reset", UI shows "applied 65 dB".
+* **MEASURED — CH1 noise does NOT depend on the gain:** gain 0 → 40 dB on Wi-Fi 2.4: noise (median 0.5 ms power, DC removed) −21.5 dBFS at
+  every step (rise 0.00 dB per dB); the strongest Wi-Fi bursts rose from +0.7 dB (0–30 dB) to +2.6 dB (40 dB) over it; no clipping (max|x| ≤ 0.58).
+  → CH1's floor is created AFTER the gain stage (not RF noise), so on CH1 more gain directly improves detection. Why the RX1 ports
+  (CH1, CH3) have this fixed −22 dBFS floor is NOT found (hardware / port check needed; RX2 ports are 30 dB lower).
+* **MEASURED — the user's 5.785 GHz generator tone on CH1 (locked on Wi-Fi 5.8, LO 5785.000 MHz, 16384-pt FFT, RBW 61 Hz):**
+  gain 25 dB → not visible (below the floor); 45 dB → line at +2319 Hz = 5785.002319 MHz, −54.0 dBFS (+8.3 dB over the median bin);
+  65 dB → same line −33.8 dBFS (+28.5 dB), i.e. +20.2 dB for +20 dB gain = a real RF signal; total level and median bin unchanged
+  (−21.6…−21.9 dBFS, −62.3 dBFS/bin); max|x| 0.37. The +2.3 kHz offset (generator vs radio reference) keeps it clear of the DC filter.
+  UI at 65 dB, 8192-pt FFT: peak readout 5785.0022 MHz ≈ −38…−41 dB; visible as a line, clearer when zoomed (±10 kHz).
+* **NOT detected by the detector:** status "quiet", no detection rows — the detector uses the band's total power, and the tone (−34 dBFS)
+  is 12 dB below CH1's broadband floor (−21.6 dBFS). Needs a narrowband (spectral peak) detector — proposed, not built.
+* State left for the user: CH1 gain 65 dB, CH1 locked on Wi-Fi 5.8 (both changeable in the UI).
+
 ### 2026-10-22 18:1x — user: "in the polar plot no need to mention DF not built yet; if real data comes show it, if not don't show" — DONE
 * AOA polar plot: the "no AOA data — DF not built yet" text removed; it shows only the empty polar grid, and bearings are drawn only when
   real AOA data arrives (no AOA source exists yet). Checked in the browser, 0 console errors.

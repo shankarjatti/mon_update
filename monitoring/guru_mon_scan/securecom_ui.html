@@ -260,7 +260,7 @@ function signalViewHTML(cfg){
       <span class="chip warn" id="${id}-dc" title="Receiver DC offset left after DC removal">DC <b>—</b></span>
       <span class="chip" id="${id}-stat">● waiting for data</span>
     </div>
-    <div class="chips">${lock}<button id="${id}-relayout" title="put the plots back in their default places">Reset layout</button></div>
+    <div class="chips">${cfg.gainCtl?`<label>RX gain <input class="num" id="${id}-gain" type="number" min="0" max="99" step="1" style="width:64px"> dB</label><button id="${id}-gainset">Set gain</button><span class="chip" id="${id}-gainstat" title="gain the radio is really using (reported by the scanner with every detection verdict)">applied —</span>`:''}${lock}<button id="${id}-relayout" title="put the plots back in their default places">Reset layout</button></div>
   </div>
   <div class="grgrid${cfg.noConst?' noconst':''}" id="${id}-grid">
     <div class="grslot" data-slot="1"><div class="grsink" id="${id}-tile-f"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Frequency Sink <b id="${id}-pk"></b><button class="grcp" id="${id}-cp-f" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
@@ -291,7 +291,7 @@ function signalViewHTML(cfg){
 }
 
 const SIGVIEWS = {
-  drone:{ id:"drone", kind:"drone", lockable:true, noConst:true,
+  drone:{ id:"drone", kind:"drone", lockable:true, noConst:true, gainCtl:true,
     title:"Drone Detection — CH1", sub:"A/RX1 · Wi‑Fi / LoRa / drone bands · every look = 10 ms switch + dwell",
     bands:["Wi‑Fi 2.4 2442","Wi‑Fi 5.2 5210","Wi‑Fi 5.8 5785","LoRa 896.5","Drone 433.9","FPV 1180","Video 5795"],
     timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: band peak over its floor)",
@@ -371,7 +371,8 @@ const LAST = {1:{},2:{},3:{},4:{}};            // ... per channel AND band
 const STAT = {1:null,2:null,3:null,4:null};   // 2 Hz status of every channel
 const LASTDET = {1:{},2:{},3:{},4:{}};         // latest detector verdict per channel AND band
 const DETROWS = {1:[],2:[],3:[],4:[]}, DETDIRTY = {};
-const PIN = {1:'',2:'',3:'',4:''};             // band each channel is locked to ('' = MON plan), as the backend reports
+const PIN = {1:'',2:'',3:'',4:''};
+const GAINREQ = {1:null,2:null,3:null,4:null};   // RX gain requested from the UI (bridge echo)             // band each channel is locked to ('' = MON plan), as the backend reports
 let PLAN = null;
 const CH_OF = {drone:1, terr:2, radar:3, imsi:4};
 let monWs=null, monConnected=false;
@@ -396,6 +397,7 @@ function monConnect(){
     else if(m.type==='det'&&m.ch){ m._rx=performance.now(); LASTDET[m.ch][m.band]=m;
       if(m.active){ const r=DETROWS[m.ch]; r.unshift(m); if(r.length>8) r.pop(); DETDIRTY[m.ch]=true; } }
     else if(m.type==='plan'){ PLAN=m.plan; for(const k in SIGVIEWS) fillBandList(k); }
+    else if(m.type==='gain'&&m.ch){ GAINREQ[m.ch]=m.req; for(const k in SIGVIEWS) if(CH_OF[k]===m.ch) showGain(k); }
     else if(m.type==='pin'&&m.ch){ PIN[m.ch]=m.band||''; for(const k in SIGVIEWS) if(CH_OF[k]===m.ch) showLock(k); }
     else if(m.type==='ch2_mode'){ syncCh2Mode(m.mode); }
     else if(m.type==='ch2_lock'){ syncCh2Lock(m); }
@@ -691,6 +693,14 @@ function showLock(k){
   if(sel && document.activeElement!==sel) sel.value=PIN[ch];
   if(st){ if(PIN[ch]){ st.textContent='● LOCKED on '+PIN[ch]; st.className='chip bad'; } else { st.textContent='● MON plan running'; st.className='chip good'; } }
 }
+function showGain(k){
+  const cf=SIGVIEWS[k]; if(!cf.gainCtl) return; const ch=CH_OF[k], inp=document.getElementById(cf.id+'-gain'), st=document.getElementById(cf.id+'-gainstat');
+  const d=Object.values(LASTDET[ch]).sort((a,b)=>b.t-a.t)[0], applied=d&&d.gain_db!=null?d.gain_db:null;
+  if(inp && document.activeElement!==inp && inp.value==='') inp.value=(GAINREQ[ch]!=null?GAINREQ[ch]:(applied!=null?applied:''));
+  if(st){ if(applied==null){ st.textContent='applied —'; st.className='chip'; }
+    else if(GAINREQ[ch]!=null && Math.abs(GAINREQ[ch]-applied)>0.5){ st.textContent='applied '+applied+' dB · setting '+GAINREQ[ch]+' dB…'; st.className='chip warn'; }
+    else { st.textContent='applied '+applied+' dB'; st.className='chip good'; } }
+}
 function sendFftCfg(k){ const st=S[k]; if(!st) return; wsSend({cmd:'fftcfg',ch:CH_OF[k],nfft:st.nfft,window:st.win}); }
 
 /* ---- per-view wiring (GNU Radio control panels) ---- */
@@ -750,6 +760,12 @@ for(const k in SIGVIEWS){
     b.onclick=()=>{ const show=p.style.display==='none'; p.style.display=show?'':'none'; b.classList.toggle('on',show);
       st.lastMsg=null; setTimeout(()=>{ st.gf.draw(); st.gt.draw(); if(st.gc) st.gc.draw(); },0); }; }
   st.ftm='free'; showVals();
+  if(cf.gainCtl){
+    $('gainset').onclick=()=>{ const v=parseFloat($('gain').value);
+      if(!isFinite(v)||v<0||v>99){ $('gainstat').textContent='enter 0 … 99 dB'; $('gainstat').className='chip warn'; return; }
+      if(!wsSend({cmd:'gain',ch:CH_OF[k],db:v})){ $('gainstat').textContent='not sent — feed offline'; $('gainstat').className='chip warn'; return; }
+      st.bands={}; $('gainstat').textContent='setting '+v+' dB…'; $('gainstat').className='chip warn'; };
+  }
   if(cf.lockable){
     $('lock').onchange=e=>{ const band=e.target.value;
       if(!wsSend({cmd:'pin',ch:CH_OF[k],band})){ const s=$('lockstat'); s.textContent='● not sent — feed offline'; s.className='chip warn'; e.target.value=PIN[CH_OF[k]]; return; }
@@ -805,7 +821,7 @@ function loop(ts){
         else st.gt.draw();
         if(st.gc && st.runC){ const cd=constData(m,st); st.gc.setData(cd); document.getElementById(cf.id+'-pv').textContent='· '+cd.n+' points · '+(m.active?'signal':'noise'); }
       }
-      tickDetections(k);
+      tickDetections(k); if(cf.gainCtl) showGain(k);
     }else if(run && !m && st.lastMsg!==false){
       st.lastMsg=false; st.gf.data=null; st.gt.data=null; if(st.gc) st.gc.data=null; st.gf.blank('waiting for this band’s dwell…'); st.gt.blank('waiting for this band’s dwell…'); if(st.gc) st.gc.blank('waiting for data…');
       document.getElementById(cf.id+'-stat').textContent='● waiting for data'; document.getElementById(cf.id+'-stat').className='chip';

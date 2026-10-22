@@ -49,6 +49,7 @@ FLOOR = {}                  # (ch, band) -> lowest rms seen for that band (dBFS)
 FFT_SIZES = (256, 512, 1024, 2048, 4096, 8192)
 FFTCFG = {ch: {"nfft": NFFT, "window": "hann"} for ch in range(1, NCH + 1)}   # set from the UI
 PIN_FILE = os.path.expanduser("~/radar2/edge_ch2/pin_ch%d.txt")               # read by mon_server
+GAIN_FILE = os.path.expanduser("~/radar2/edge_ch2/gain_ch%d.txt")             # read by mon_server (live RX gain)
 
 # the real scan plan (scan_plan.py, the scanner's source of truth) -> the UI's band lists
 sys.path.insert(0, os.path.expanduser("~/radar2/guru_mon_scan"))
@@ -94,6 +95,13 @@ def window(name, n):
     if name == "kaiser":
         return np.kaiser(n, 8.6)
     return np.hanning(n)
+
+
+def read_gain_req(ch):
+    try:
+        return float(open(GAIN_FILE % ch).read().strip())
+    except Exception:
+        return None
 
 
 def read_pin(ch):
@@ -280,6 +288,7 @@ async def handler(ws):
         await ws.send(json.dumps({"type": "plan", "plan": PLAN}))
         for c in range(1, NCH + 1):
             await ws.send(json.dumps({"type": "pin", "ch": c, "band": read_pin(c)}))
+            await ws.send(json.dumps({"type": "gain", "ch": c, "req": read_gain_req(c)}))
         await ws.send(json.dumps({"type": "ch2_lock", **read_ch2_lock()}))
         async for raw in ws:
             # UI -> backend control: set CH2 terrestrial mode
@@ -303,6 +312,24 @@ async def handler(ws):
                         f.write(band)
                     print("[mon_ws] CH%d %s" % (c, ("LOCK -> " + band) if band else "MON plan"), flush=True)
                     data = json.dumps({"type": "pin", "ch": c, "band": band})
+                    for cl in list(CLIENTS):
+                        try: await cl.send(data)
+                        except Exception: CLIENTS.discard(cl)
+                continue
+            if m.get("cmd") == "gain":
+                # UI RX gain for one channel -> mon_server applies it live (clamped to the radio's range)
+                c = int(m.get("ch", 0))
+                try:
+                    db = float(m.get("db"))
+                except Exception:
+                    continue
+                if c in range(1, NCH + 1) and 0.0 <= db <= 100.0:
+                    with open(GAIN_FILE % c, "w") as f:
+                        f.write("%.1f" % db)
+                    for k in [k for k in FLOOR if k[0] == c]:     # floors were measured at the old gain
+                        del FLOOR[k]
+                    print("[mon_ws] CH%d RX gain request -> %.1f dB" % (c, db), flush=True)
+                    data = json.dumps({"type": "gain", "ch": c, "req": db})
                     for cl in list(CLIENTS):
                         try: await cl.send(data)
                         except Exception: CLIENTS.discard(cl)

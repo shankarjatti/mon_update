@@ -46,6 +46,8 @@ CH2_LOCK_FILE = os.path.expanduser("~/radar2/edge_ch2/ch2_lock.txt")
 # UI band lock: the UI (via mon_ws_bridge) writes a band name into pin_chN.txt -> that channel holds
 # that band only (no scanning); an empty file = run the MON plan. Read every look (cached by mtime).
 PIN_FILE = os.path.expanduser("~/radar2/edge_ch2/pin_ch%d.txt")
+# UI RX gain: the UI (via mon_ws_bridge) writes a gain in dB into gain_chN.txt -> applied live to that channel.
+GAIN_FILE = os.path.expanduser("~/radar2/edge_ch2/gain_ch%d.txt")
 CH2 = 1                      # 0-indexed terrestrial channel
 DET_PORT = 5210                # detections (one JSON per dwell) -> UI bridge / edge modules
 SETTLE_S = 0.014               # detector ignores the first 14 ms of each look (10 ms switch + retune transient, measured,
@@ -101,7 +103,10 @@ class mon_server(gr.top_block):
             g = self.ch2_gain if (ch == CH2 and self.ch2_gain is not None) else gain
             g = max(rng.start(), min(rng.stop(), g))
             self.src.set_gain(g, ch)
-            print("[setup] CH%d gain = %.0f dB" % (ch + 1, g), flush=True)
+            print("[setup] CH%d gain = %.0f dB (range %.0f..%.0f dB)" % (ch + 1, g, rng.start(), rng.stop()), flush=True)
+        self._gain = {ch: float(self.src.get_gain(ch)) for ch in range(NCH)}
+        self._gain_rng = {ch: (self.src.get_gain_range(ch).start(), self.src.get_gain_range(ch).stop()) for ch in range(NCH)}
+        self._gain_cache = {}
 
         self.frames = scan_plan.build_frames(look_bw)
         for ch, name in (pins or {}).items():
@@ -209,10 +214,38 @@ class mon_server(gr.top_block):
         self._pin_cache[ch] = (mt, v)
         return v
 
+    def apply_ui_gain(self, ch):
+        """Apply the RX gain the UI asked for (gain_chN.txt), if it changed. The band floors of that
+        channel are reset: they were measured at the old gain (else every band would read ACTIVE)."""
+        fn = GAIN_FILE % (ch + 1)
+        try:
+            mt = os.path.getmtime(fn)
+        except OSError:
+            return
+        c = self._gain_cache.get(ch)
+        if c and c[0] == mt:
+            return
+        try:
+            want = float(open(fn).read().strip())
+        except Exception:
+            self._gain_cache[ch] = (mt, None)
+            return
+        self._gain_cache[ch] = (mt, want)
+        lo, hi = self._gain_rng[ch]
+        want = max(lo, min(hi, want))
+        if abs(want - self._gain[ch]) < 0.01:
+            return
+        self.src.set_gain(want, ch)
+        self._gain[ch] = float(self.src.get_gain(ch))
+        for k in [k for k in self.floor if k[0] == ch]:
+            del self.floor[k]
+        print("[gain] CH%d RX gain -> %.1f dB (UI); band floors of CH%d reset" % (ch + 1, self._gain[ch], ch + 1), flush=True)
+
     def _measure(self, ch, name, freq, idx, frame_no, dwell_ms, retune=True):
         """Tune, tag, settle+dwell, return (db, active). Logs active bands.
         retune=False (band lock, same band again): no retune and no switch wait."""
         self._last_tick[ch] = time.time()
+        self.apply_ui_gain(ch)
         _t0 = time.time()
         if retune:
             self.src.set_center_freq(uhd.tune_request(float(freq)), ch)
@@ -255,6 +288,7 @@ class mon_server(gr.top_block):
                         "ch": ch + 1, "band": name, "freq_mhz": freq / 1e6,
                         "peak_dbfs": round(db, 1), "floor_dbfs": round(fl, 1),
                         "active": bool(active), "frame": int(frame_no), "look": int(idx),
+                        "gain_db": round(self._gain[ch], 1),
                         "dwell_ms": float(dwell_ms), "t": time.time()}), flags=zmq.NOBLOCK)
                 except Exception:
                     pass
