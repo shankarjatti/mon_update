@@ -39,7 +39,7 @@ class mon_pub(gr.sync_block):
         # ~7x fewer Python calls and ZeroMQ messages per channel (measured: 364-sample blocks pushed the
         # scanner to 156 % CPU, load 11 on 12 cores, UHD overflows). Look tags land on these chunk
         # boundaries, so the detector settle time covers +2 ms (see mon_server SETTLE_S).
-        self.set_output_multiple(2048)
+        self.set_output_multiple(max(256, int(round(0.002 * self.samp_rate))) if self.samp_rate > 0 else 2048)   # ~2 ms chunks at any rate
         if self.publish:
             self._ctx = zmq.Context.instance()
             self._sock = self._ctx.socket(zmq.PUB)

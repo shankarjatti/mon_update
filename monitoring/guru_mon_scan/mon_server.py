@@ -71,7 +71,7 @@ def is_terr_proto(name):
 
 class mon_server(gr.top_block):
     def __init__(self, addr, samp_rate, gain, publish=True, look_bw=0.0, pins=None,
-                 ch2_gain=None, dc_alpha=0.001):
+                 ch2_gain=None, dc_alpha=0.001, ch2_bw=200e3):
         gr.top_block.__init__(self, "mon_server")
         self.samp_rate = samp_rate
         self.publish = publish
@@ -132,12 +132,22 @@ class mon_server(gr.top_block):
         #   y = x - single_pole_lowpass(x)   (a high-pass, corner ~ alpha*fs/2pi = 160 Hz at alpha 0.001, 1 MS/s)
         self.dc_alpha = float(dc_alpha)
         self._avg_len = max(200, int(samp_rate * 0.001))       # 1 ms power window
+        # CH2 (terrestrial / air & maritime): every look is cut to ch2_bw (user: 200 kHz for each frequency)
+        # by a low-pass + decimation right after the DC removal: the detector, the published IQ (5202) and
+        # the decoders all see exactly +-ch2_bw/2 around the tuned frequency, at ch2_bw samples/s
+        # (= the decoders' 200 kS/s input rate, so the router no longer decimates).
+        self.ch2_bw = float(ch2_bw or 0)
+        ch2_dec = int(round(samp_rate / self.ch2_bw)) if self.ch2_bw > 0 else 1
+        if ch2_dec > 1 and abs(samp_rate / ch2_dec - self.ch2_bw) > 1.0:
+            raise ValueError("--ch2-bw must divide the sample rate (%.0f / %.0f)" % (samp_rate, self.ch2_bw))
         self.pub = []
         self.probes = []
         for ch in range(NCH):
+            rate = samp_rate / ch2_dec if (ch == CH2 and ch2_dec > 1) else samp_rate
             p = mon_pub(ch, "tcp://127.0.0.1:%d" % (BASE_PORT + ch), publish=publish,
-                        samp_rate=samp_rate)
-            pr = look_power(samp_rate, settle_s=SETTLE_S, win_s=WIN_S)   # sample-accurate per-look power
+                        samp_rate=rate)
+            pr = look_power(rate, settle_s=SETTLE_S, win_s=WIN_S,
+                            nfft=2048 if rate >= 1e6 else 512)       # sample-accurate per-look power + lines
             if self.dc_alpha > 0:
                 dcsub = blocks.sub_cc(1)
                 dclp = filter.single_pole_iir_filter_cc(self.dc_alpha)
@@ -146,7 +156,14 @@ class mon_server(gr.top_block):
                 head = (dcsub, 0)
             else:
                 head = (self.src, ch)
-            if ch == CH2:
+            if ch == CH2 and ch2_dec > 1:
+                # pass +-0.45*bw, stop at +-0.5*bw (the new Nyquist) -> no aliasing into the 200 kHz view
+                taps = firdes.low_pass(1.0, samp_rate, 0.45 * self.ch2_bw, 0.1 * self.ch2_bw)
+                dec = filter.fir_filter_ccf(ch2_dec, taps)
+                self.connect(head, dec, p, pr)
+                print("[setup] CH2 bandwidth %.0f kHz per look: low-pass %d taps, decimate %d -> %.0f kS/s"
+                      % (self.ch2_bw / 1e3, len(taps), ch2_dec, rate / 1e3), flush=True)
+            elif ch == CH2:
                 lpf = filter.fir_filter_ccf(1, self._ch2_lpf_taps)
                 self.connect(head, p, lpf, pr)
             else:
@@ -420,6 +437,8 @@ def main():
     ap.add_argument("--ch2-gain", type=float, default=None,
                     help="separate gain for CH2 terrestrial (lower, so strong close "
                          "hand-radios don't overload the ADC). Default: same as --gain.")
+    ap.add_argument("--ch2-bw", type=float, default=200e3,
+                    help="CH2 bandwidth per look in Hz (low-pass + decimate; 0 = full sample rate). Default 200 kHz")
     ap.add_argument("--dc-alpha", type=float, default=0.001,
                     help="DC removal: single-pole corner alpha (0 = off). Default 0.001 = ~160 Hz high-pass at 1 MS/s")
     ap.add_argument("--no-pub", action="store_true", help="scan + detect only, do not publish")
@@ -434,7 +453,7 @@ def main():
         pins[int(ch_s) - 1] = name.strip()
 
     tb = mon_server(a.addr, a.samp_rate, a.gain, publish=not a.no_pub, look_bw=a.look_bw,
-                    pins=pins, ch2_gain=a.ch2_gain, dc_alpha=a.dc_alpha)
+                    pins=pins, ch2_gain=a.ch2_gain, dc_alpha=a.dc_alpha, ch2_bw=a.ch2_bw)
     tb.start()
     tb.start_scan()
     if tb.publish:

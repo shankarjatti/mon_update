@@ -55,6 +55,21 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 20:xx — user: "80 MHz per band — not needed now, leave it; move to CH2" · "in CH2 for each frequency set bandwidth 200 kHz" — DONE, VERIFIED
+* 80 MHz looks: answered (needs ≥ 100 MS/s per channel: 10 GbE SFP+ NIC + XG image + C++ processing; today's link 1 Gb/s, RTL8125 at
+  1000 Mb/s) — user: not now.
+* CH2 explained (scan plan as in code): 8 × terrestrial [D-STAR 145.0 50 · TETRA 420.0 142 · DMR 446.100 150 · P25 450.0 450 · NXDN 451.0 200 ms]
+  + 1 × air & maritime [AIS 161.975 400 · ADS-B 1090 400 ms], 42 looks, 9,156 ms; gain 10 dB; CH2 found in Mode 2 (auto-detect & hold,
+  `ch2_mode.txt` = auto), which searches DMR / NXDN / P25 / TETRA only.
+* **CH2 = 200 kHz per look:** `mon_server.py` `--ch2-bw` (default 200 kHz): after the DC removal, CH2 is low-passed (121 taps, pass ±90 kHz,
+  stop ±100 kHz) and decimated 5 → 200 kS/s, so the detector, the published IQ (5202) and the decoders all see exactly ±100 kHz around
+  each tuned frequency. `mon_pub` chunks are ~2 ms at any rate (400 samples at 200 kS/s); `look_power` uses a 512-point spectrum below 1 MS/s.
+  The router no longer decimates (header samp_rate = 200000 = the decoders' rate).
+* VERIFIED: log "[setup] CH2 bandwidth 200 kHz per look: low-pass 121 taps, decimate 5 -> 200 kS/s"; 5202 header samp_rate 200000, 200,000
+  samples/s measured; P25 decoder port 7003 gets each 460 ms dwell as one continuous run (23 × 20 ms ticks); router CPU 20 → 13 %.
+* Limits: DMR's outermost channels (±93.75 kHz) sit near the filter edge (slightly reduced); ADS-B needs ~2 MHz to decode → at 200 kHz
+  (as before at 1 MS/s) only detection, no decoding.
+
 ### 2026-10-22 19:5x — user (screenshot, generator raised): "make the frequency and time scale less" — DONE, checked
 * User raised the generator: CH1 (gain 65 dB, locked on Wi-Fi 5.8) now shows the tone ACTIVE by band power AND line: status
   "peak −7.5 dBFS (floor −20.1) · line 5785.002441 MHz +42 dB"; detections "line +42.5 dB · power +12.6 dB".
