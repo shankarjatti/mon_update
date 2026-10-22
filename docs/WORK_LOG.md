@@ -55,6 +55,11 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 17:3x — user: "those options should show only when I click a control panel option" — DONE, checked
+* As GNU Radio (control panel off by default): every sink (Frequency, Time, Constellation) starts with its control panel HIDDEN and the plot at
+  full width; a "Control Panel" button in each sink's title bar shows / hides that sink's panel. Checked in the browser: hidden → plot 747 px;
+  click → panel shown, plot 534 px, button highlighted; click again → hidden, 747 px. 0 console errors.
+
 ### 2026-10-22 17:xx — user: "still graphs are not good in CH1 … copy the GNU Radio graph style and set it 100 % same" · "remove waterfall graph" — DONE, checked in the browser
 * Reference taken from the REAL GNU Radio 3.8 qtgui sinks on this PC: freq_sink_c, time_sink_c, waterfall_sink_c, const_sink_c rendered
   off-screen (GRC default settings, plus grid + control panel) to PNG (`monitoring/guru_mon_scan/tools/render_gr_sinks.py`), then copied:

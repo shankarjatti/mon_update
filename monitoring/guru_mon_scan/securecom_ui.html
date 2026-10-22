@@ -101,7 +101,9 @@
   .ctl .hint{font-size:11px;color:var(--muted);margin-left:auto}
   /* GNU Radio 3.8 QT GUI sink look (copied from the real sinks rendered on this PC) */
   .grsink{background:#efefef;border:1px solid #c9c9c9;border-radius:4px;margin-top:12px;padding:6px 6px 8px;font-family:"DejaVu Sans","Bitstream Vera Sans",Verdana,sans-serif;color:#000}
-  .grtitle{font-size:13px;font-weight:bold;margin:0 0 4px 2px}
+  .grtitle{font-size:13px;font-weight:bold;margin:0 0 4px 2px;display:flex;align-items:center;gap:6px}
+  button.grcp{margin-left:auto;font-size:12px;font-weight:normal;padding:2px 10px;background:#f7f7f7;border:1px solid #b5b5b5;border-radius:3px;color:#000}
+  button.grcp.on{background:#d6e4f7;border-color:#7a9fd6}
   .grtitle b{font-weight:normal;color:#333;font-size:12px}
   .grbody{display:flex;gap:8px;align-items:stretch}
   .grplot{flex:1;min-width:0;position:relative}
@@ -240,26 +242,26 @@ function signalViewHTML(cfg){
     </div>
     <div class="chips">${lock}</div>
   </div>
-  <div class="grsink"><div class="grtitle">Frequency Sink <b id="${id}-pk"></b></div><div class="grbody">
+  <div class="grsink"><div class="grtitle">Frequency Sink <b id="${id}-pk"></b><button class="grcp" id="${id}-cp-f" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
     <div class="grplot" style="min-height:360px"><canvas id="${id}-fft" class="grcv"></canvas></div>
-    <div class="grpanel">
+    <div class="grpanel" id="${id}-pan-f" style="display:none">
       ${grp('Trace Options', cb('fmax','Max Hold',false)+cb('fmin','Min Hold',false)+`<div class="grrow"><span>Avg:</span><input type="range" class="grslider" id="${id}-favg" min="1" max="100" value="100"></div>`)}
       ${grp('Axis Options', cb('fgrid','Grid',false)+cb('fax','Axis Labels',true)+pm('fyr','Y Range')+pm('fref','Ref Level')+btn('fauto','Autoscale'))}
       ${grp('FFT', sel('nfft',NF,1024)+sel('win',WIN,'blackmanharris'))}
       ${grp('Trigger', sel('ftm',[['free','Free'],['auto','Auto'],['normal','Normal']],'free')+pm('flev','Level'))}
       ${grp('Extras', btn('fstop','Stop')+btn('fpng','Save Image')+btn('fcsv','Export CSV'))}
     </div></div></div>
-  <div class="grsink"><div class="grtitle">Time Sink <b id="${id}-tv"></b></div><div class="grbody">
+  <div class="grsink"><div class="grtitle">Time Sink <b id="${id}-tv"></b><button class="grcp" id="${id}-cp-t" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
     <div class="grplot" style="min-height:340px"><canvas id="${id}-time" class="grcv"></canvas></div>
-    <div class="grpanel">
+    <div class="grpanel" id="${id}-pan-t" style="display:none">
       ${grp('Axes', cb('tauto','Autoscale',false)+cb('tgrid','Grid',false)+cb('tax','Axis Labels',true)+pm('tyo','Y Offset')+pm('tyr','Y Range')+pm('txm','X Max'))}
       ${grp('Trigger', sel('ttm',[['free','Free'],['auto','Auto'],['normal','Normal']],'free')+sel('tsl',[['pos','Positive'],['neg','Negative']],'pos')+sel('tch',[['0','Data 0 (I)'],['1','Data 1 (Q)']],'0')+pm('tlev','Level')+pm('tdel','Delay'))}
       ${grp('Extras', btn('tone','Autoscale')+btn('tstop','Stop')+btn('tpng','Save Image')+btn('tcsv','Export CSV'))}
     </div></div></div>
   <div class="grpair">
-  <div class="grsink"><div class="grtitle">Constellation Sink <b id="${id}-pv"></b></div><div class="grbody">
+  <div class="grsink"><div class="grtitle">Constellation Sink <b id="${id}-pv"></b><button class="grcp" id="${id}-cp-c" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
     <div class="grplot" style="min-height:330px"><canvas id="${id}-iq" class="grcv"></canvas></div>
-    <div class="grpanel">
+    <div class="grpanel" id="${id}-pan-c" style="display:none">
       ${grp('Axes', cb('cauto','Autoscale',false)+cb('cgrid','Grid',false)+cb('cax','Axis Labels',true)+pm('cr','Range'))}
       ${grp('Extras', btn('cstop','Stop')+btn('cpng','Save Image'))}
     </div></div></div>
@@ -724,6 +726,9 @@ for(const k in SIGVIEWS){
   on('cr-m',()=>{ const r=st.gc.ylim[1]/2; st.gc.ylim=[-r,r]; st.gc.xlim=[-r,r]; st.gc.zoom=[]; re(); });
   on('cstop',()=>{ st.runC=!st.runC; $('cstop').textContent=st.runC?'Stop':'Start'; re(); });
   on('cpng',()=>st.gc.png(id+'_constellation'));
+  for(const x of ['f','t','c']){ const b=$('cp-'+x), p=$('pan-'+x);
+    b.onclick=()=>{ const show=p.style.display==='none'; p.style.display=show?'':'none'; b.classList.toggle('on',show);
+      st.lastMsg=null; setTimeout(()=>{ st.gf.draw(); st.gt.draw(); st.gc.draw(); },0); }; }
   st.ftm='free'; showVals();
   if(cf.lockable){
     $('lock').onchange=e=>{ const band=e.target.value;
