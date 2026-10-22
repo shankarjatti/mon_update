@@ -294,18 +294,18 @@ const SIGVIEWS = {
   drone:{ id:"drone", kind:"drone", lockable:true, noConst:true, gainCtl:true,
     title:"Drone Detection — CH1", sub:"A/RX1 · Wi‑Fi / LoRa / drone bands · every look = 10 ms switch + dwell",
     bands:["Wi‑Fi 2.4 2442","Wi‑Fi 5.2 5210","Wi‑Fi 5.8 5785","LoRa 896.5","Drone 433.9","FPV 1180","Video 5795"],
-    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: band peak over its floor)",
-    tableHead:"<tr><th>Time</th><th>Band</th><th class='r'>MHz</th><th class='r'>Peak dBFS</th><th class='r'>Over floor dB</th></tr>" },
+    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: narrowband line or band power)",
+    tableHead:"<tr><th>Time</th><th>Band</th><th class='r'>MHz (line or band)</th><th class='r'>Level dBFS</th><th class='r'>Detected by</th></tr>" },
   radar:{ id:"radar", kind:"radar",
     title:"Radar Classification — CH3", sub:"B/RX1 · L / S / C ground radars · pulse PW / PRI / scan",
     bands:["L 1300","S 2900","S 3250","C 5520","C 5650"],
-    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: band peak over its floor)",
-    tableHead:"<tr><th>Time</th><th>Band</th><th class='r'>MHz</th><th class='r'>Peak dBFS</th><th class='r'>Over floor dB</th></tr>" },
+    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: narrowband line or band power)",
+    tableHead:"<tr><th>Time</th><th>Band</th><th class='r'>MHz (line or band)</th><th class='r'>Level dBFS</th><th class='r'>Detected by</th></tr>" },
   imsi:{ id:"imsi", kind:"imsi",
     title:"IMSI Catcher — CH4", sub:"B/RX2 · 2G/4G/5G downlink · cell / ARFCN survey (DL only)",
     bands:["2G 930.0","2G 947.5","2G 1842.5","B28 780.5","B5 881.5","B8 942.5","B1 2140","B40 2350","n78 3485"],
-    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: band peak over its floor)",
-    tableHead:"<tr><th>Time</th><th>Band</th><th class='r'>MHz</th><th class='r'>Peak dBFS</th><th class='r'>Over floor dB</th></tr>" },
+    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: narrowband line or band power)",
+    tableHead:"<tr><th>Time</th><th>Band</th><th class='r'>MHz (line or band)</th><th class='r'>Level dBFS</th><th class='r'>Detected by</th></tr>" },
 };
 for(const k in SIGVIEWS){ document.getElementById('view-'+k).innerHTML = signalViewHTML(SIGVIEWS[k]); }
 
@@ -786,7 +786,8 @@ function updateChips(k,m){
   const dcEl=document.querySelector('#'+cf.id+'-dc b'); if(dcEl&&m.dc_dbfs!=null) dcEl.textContent=m.dc_dbfs+' dBFS';
   const stat=document.getElementById(cf.id+'-stat'), tag=age>2.5?' · last IQ '+age.toFixed(1)+' s ago':'';
   const d=LASTDET[CH_OF[k]][m.band], dage=d?(performance.now()-d._rx)/1000:0;
-  if(d){ stat.textContent=(d.active?'● ACTIVE ':'● quiet ')+'peak '+d.peak_dbfs+' dBFS (floor '+d.floor_dbfs+')'+(dage>3?' · verdict '+dage.toFixed(0)+' s ago':'')+tag;
+  if(d){ const nbtxt=d.nb_active?(' · line '+d.nb_mhz.toFixed(6)+' MHz +'+d.nb_db+' dB'):'';
+    stat.textContent=(d.active?'● ACTIVE ':'● quiet ')+'peak '+d.peak_dbfs+' dBFS (floor '+d.floor_dbfs+')'+nbtxt+(dage>3?' · verdict '+dage.toFixed(0)+' s ago':'')+tag;
     stat.className='chip '+(age>2.5?'warn':(d.active?'bad':'good')); }
   else{ stat.textContent='● no verdict yet for this band · signal '+m.rms_dbfs+' dBFS'+tag; stat.className='chip '+(age>2.5?'warn':'good'); }
 }
@@ -796,7 +797,8 @@ function tickDetections(k){
   const cf=SIGVIEWS[k], ch=CH_OF[k]; if(!DETDIRTY[ch]) return; DETDIRTY[ch]=false;
   document.getElementById(cf.id+'-tbody').innerHTML=DETROWS[ch].map(d=>{
     const tm=new Date(d.t*1000).toLocaleTimeString([], {hour12:false});
-    return `<tr><td>${tm}</td><td>${d.band}</td><td class='r'>${d.freq_mhz.toFixed(3)}</td><td class='r'>${d.peak_dbfs}</td><td class='r'>+${(d.peak_dbfs-d.floor_dbfs).toFixed(1)}</td></tr>`; }).join('');
+    const nb=d.nb_active, mhz=nb?d.nb_mhz.toFixed(6):d.freq_mhz.toFixed(3), how=(nb?'line +'+d.nb_db+' dB':'')+(nb&&d.power_active?' · ':'')+(d.power_active?'power +'+(d.peak_dbfs-d.floor_dbfs).toFixed(1)+' dB':'');
+    return `<tr><td>${tm}</td><td>${d.band}</td><td class='r'>${mhz}</td><td class='r'>${nb?d.nb_dbfs:d.peak_dbfs}</td><td class='r'>${how}</td></tr>`; }).join('');
   document.getElementById(cf.id+'-cnt').textContent=DETROWS[ch].length;
 }
 

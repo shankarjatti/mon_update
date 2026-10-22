@@ -52,6 +52,7 @@ CH2 = 1                      # 0-indexed terrestrial channel
 DET_PORT = 5210                # detections (one JSON per dwell) -> UI bridge / edge modules
 SETTLE_S = 0.014               # detector ignores the first 14 ms of each look (10 ms switch + retune transient, measured,
                                # + 2 ms because look tags sit on 2048-sample chunk boundaries)
+NB_MARGIN_DB = 10.0            # narrowband: a spectral line >= 10 dB over the median bin = ACTIVE (2048-pt, >= 3 segments)
 WIN_S = 0.0005                 # detector power window 0.5 ms; ACTIVE uses the peak window of the look
 ACTIVE_MARGIN_DB = 2.5       # a band reads "active" at its own floor + 2.5 dB. Measured 2026-10-22: with DC removed, noise-only
                              # 0.5 ms peaks stay within +1.4 dB of the band floor, so 2.5 dB gives >1 dB safety (old value 8 dB hid real bursts)
@@ -273,10 +274,13 @@ class mon_server(gr.top_block):
             if fl is None or db < fl:
                 self.floor[(ch, freq)] = db
                 fl = db
-            if db > fl + ACTIVE_MARGIN_DB:
+            nb = self.probes[ch].nb()               # strongest narrowband line of THIS look (real spectrum)
+            nb_on = nb is not None and nb[0] >= NB_MARGIN_DB
+            if db > fl + ACTIVE_MARGIN_DB or nb_on:
                 active = True
-                print("[ACTIVE] %s %-18s %.4f MHz  %6.1f dBFS  (floor %6.1f)"
-                      % (CH_NAME[ch][:3], name, freq / 1e6, db, fl), flush=True)
+                print("[ACTIVE] %s %-18s %.4f MHz  %6.1f dBFS  (floor %6.1f)%s"
+                      % (CH_NAME[ch][:3], name, freq / 1e6, db, fl,
+                         ("  narrowband line %.6f MHz %+.1f dB" % ((freq + nb[1]) / 1e6, nb[0])) if nb_on else ""), flush=True)
                 with self.loglock:
                     self.log.write("%s,%d,%s,%s,%.4f,%.1f,%.1f\n"
                                    % (time.strftime("%Y-%m-%dT%H:%M:%S"), ch,
@@ -289,6 +293,10 @@ class mon_server(gr.top_block):
                         "peak_dbfs": round(db, 1), "floor_dbfs": round(fl, 1),
                         "active": bool(active), "frame": int(frame_no), "look": int(idx),
                         "gain_db": round(self._gain[ch], 1),
+                        "nb_db": None if nb is None else round(nb[0], 1),
+                        "nb_mhz": None if nb is None else round((freq + nb[1]) / 1e6, 6),
+                        "nb_dbfs": None if nb is None else round(nb[2], 1),
+                        "nb_active": bool(nb_on), "power_active": bool(db > fl + ACTIVE_MARGIN_DB),
                         "dwell_ms": float(dwell_ms), "t": time.time()}), flags=zmq.NOBLOCK)
                 except Exception:
                     pass

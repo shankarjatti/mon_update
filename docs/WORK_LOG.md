@@ -55,6 +55,19 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 19:xx — user: "I should see a good proper real signal … tell me the TX gain … do real changes, no fake signals" — narrowband detector BUILT, VERIFIED with the user's generator
+* `look_power.py` now also averages a 2048-point Hann power spectrum over the settled part of each look (sample-accurate, real samples);
+  `nb()` = strongest line outside ±2 kHz of 0 Hz, in dB over the MEDIAN bin, its frequency and level (needs ≥ 3 segments).
+  `mon_server.py`: ACTIVE = band-power rule (floor + 2.5 dB) OR narrowband line ≥ 10 dB over the median bin; verdict JSON adds
+  `nb_db`, `nb_mhz`, `nb_dbfs`, `nb_active`, `power_active`; the [ACTIVE] log line prints the line frequency.
+  UI: status chip shows "line <MHz> +<dB>", detections table shows the line frequency (6 decimals), its level, and "line +x dB" / "power +x dB".
+* MEASURED (generator 5.785 GHz, CH1 gain 65 dB, locked on Wi-Fi 5.8): every verdict ACTIVE by narrowband line at **5785.002441 MHz,
+  +26.5 … +27.2 dB over the median bin, −25.9 … −26.6 dBFS**; the band-power rule alone stays inactive (band peak −19.0, floor −19.2).
+  Gain 65 dB and the lock were restored from their files after the restart ("[pin] … LOCKED", "[gain] … 65.0 dB").
+* TX advice given: raise the generator ≈ +10 dB from its current setting → line ≈ −15 dBFS (≈ 38 dB over the noise); no more than ≈ +20 dB
+  (approaching full scale); cabled: TwinRX port must never see more than +10 dBm (damage limit), use attenuators.
+* Open: false-alarm check of the narrowband rule on quiet bands over a full MON frame (and on CH2–CH4, which also use it now).
+
 ### 2026-10-22 18:3x–19:xx — user: "CH1: I can set the receiving gain … signal not strong, do we need more gain?" · "we are generating 5.785 GHz with a signal generator — check it is detected, I should see it clearly"
 * **CH1 RX gain from the UI (live):** UI "RX gain [ ] dB / Set gain / applied … dB" (CH1) → bridge `gain` command → `edge_ch2/gain_ch1.txt` →
   mon_server applies it at the next look (clamped to the radio range, reported 0…99 dB) and RESETS that channel's band floors (else every

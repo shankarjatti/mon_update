@@ -11,6 +11,12 @@ first `settle_s` of samples (retune / switch transient), then tracks
   - the PEAK of the mean power in windows of `win_s` (catches short bursts), and
   - the MEAN power over the settled part of the look.
 mon_server reads stats() at the end of the dwell. Nothing is estimated from time.
+
+Narrowband detection (added 2026-10-22): the total power misses a narrow line that is weaker than the
+whole band's noise (measured: a 5.785 GHz generator tone +28.5 dB over the noise per bin, but 12 dB below
+CH1's total floor). So the block also averages an `nfft`-point Hann power spectrum over the settled part
+of the look; nb() returns the strongest line (outside +-dc_guard of 0 Hz) over the MEDIAN bin, its
+frequency offset and level. Needs >= 3 averaged segments.
 """
 import threading
 
@@ -20,11 +26,18 @@ from gnuradio import gr
 
 
 class look_power(gr.sync_block):
-    def __init__(self, samp_rate, settle_s=0.012, win_s=0.0005):
+    def __init__(self, samp_rate, settle_s=0.012, win_s=0.0005, nfft=2048, dc_guard_hz=2000.0):
         gr.sync_block.__init__(self, name="look_power",
                                in_sig=[np.complex64], out_sig=None)
         self.settle = int(settle_s * samp_rate)
         self.W = max(16, int(win_s * samp_rate))
+        self.fs = float(samp_rate)
+        self.nfft = int(nfft)
+        self._win = np.hanning(self.nfft)
+        self._wn = float((self._win ** 2).sum())
+        f = (np.arange(self.nfft) - self.nfft // 2) * self.fs / self.nfft
+        self._f = f
+        self._use = np.abs(f) > dc_guard_hz                      # bins outside the DC guard
         self._lock = threading.Lock()
         self._key = None
         self._reset()
@@ -37,6 +50,9 @@ class look_power(gr.sync_block):
         self._sum = 0.0      # total power (settled part)
         self._n = 0          # settled samples
         self._nwin = 0       # complete windows
+        self._spec = np.zeros(self.nfft)   # summed |FFT|^2 (Hann) of the settled samples
+        self._nseg = 0
+        self._sbuf = np.zeros(0, np.complex64)
 
     def _feed(self, x):
         if self._skip:
@@ -45,6 +61,14 @@ class look_power(gr.sync_block):
             self._skip -= d
         if len(x) == 0:
             return
+        # narrowband: whole nfft segments of the settled samples (remainder carried to the next call)
+        sb = np.concatenate((self._sbuf, x)) if self._sbuf.size else x
+        k2 = sb.size // self.nfft
+        if k2:
+            segs = sb[:k2 * self.nfft].reshape(k2, self.nfft) * self._win
+            self._spec += (np.abs(np.fft.fft(segs, axis=1)) ** 2).sum(axis=0)
+            self._nseg += k2
+        self._sbuf = sb[k2 * self.nfft:].copy()
         p = x.real.astype(np.float64) ** 2 + x.imag.astype(np.float64) ** 2
         self._sum += float(p.sum())
         self._n += len(p)
@@ -87,6 +111,21 @@ class look_power(gr.sync_block):
                 pos = off
             self._feed(x[pos:])
         return n
+
+    def nb(self):
+        """Strongest narrowband line of the look: (dB over the median bin, offset Hz, level dBFS per bin,
+        segments averaged) or None. Level: a full-scale complex tone reads 0 dBFS."""
+        with self._lock:
+            if self._nseg < 3:
+                return None
+            s = np.fft.fftshift(self._spec) / self._nseg
+            u = s[self._use]
+            j = int(np.argmax(u))
+            med = float(np.median(u))
+            pk = float(u[j])
+            f = float(self._f[self._use][j])
+            return (10.0 * np.log10(pk / max(med, 1e-30)), f,
+                    10.0 * np.log10(pk / (self._win.sum() ** 2) + 1e-30), self._nseg)
 
     def stats(self):
         """(look key = host_time of its set_look, peak dB, mean dB, settled samples)."""
