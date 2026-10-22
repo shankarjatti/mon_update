@@ -133,6 +133,7 @@
   .grslot[data-slot="3"]{grid-column:2;grid-row:1}
   .grslot[data-slot="4"]{grid-column:2;grid-row:2}
   .grslot[data-slot="5"]{grid-column:1/-1;grid-row:3}
+  .grgrid.noconst .grslot[data-slot="4"]{grid-row:1/3}
   .grslot.drop{outline:2px dashed #1769e0;outline-offset:1px}
   .grgrid .grsink{margin-top:0;flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
   .grgrid .grbody{flex:1;min-height:0}
@@ -261,7 +262,7 @@ function signalViewHTML(cfg){
     </div>
     <div class="chips">${lock}<button id="${id}-relayout" title="put the plots back in their default places">Reset layout</button></div>
   </div>
-  <div class="grgrid" id="${id}-grid">
+  <div class="grgrid${cfg.noConst?' noconst':''}" id="${id}-grid">
     <div class="grslot" data-slot="1"><div class="grsink" id="${id}-tile-f"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Frequency Sink <b id="${id}-pk"></b><button class="grcp" id="${id}-cp-f" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
     <div class="grplot"><canvas id="${id}-fft" class="grcv"></canvas></div>
     <div class="grpanel" id="${id}-pan-f" style="display:none">
@@ -278,19 +279,19 @@ function signalViewHTML(cfg){
       ${grp('Trigger', sel('ttm',[['free','Free'],['auto','Auto'],['normal','Normal']],'free')+sel('tsl',[['pos','Positive'],['neg','Negative']],'pos')+sel('tch',[['0','Data 0 (I)'],['1','Data 1 (Q)']],'0')+pm('tlev','Level')+pm('tdel','Delay'))}
       ${grp('Extras', btn('tone','Autoscale')+btn('tstop','Stop')+btn('tpng','Save Image')+btn('tcsv','Export CSV'))}
     </div></div></div></div>
-    <div class="grslot" data-slot="3"><div class="grsink" id="${id}-tile-c"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Constellation Sink <b id="${id}-pv"></b><button class="grcp" id="${id}-cp-c" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
+    ${cfg.noConst?'':`<div class="grslot" data-slot="3"><div class="grsink" id="${id}-tile-c"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">Constellation Sink <b id="${id}-pv"></b><button class="grcp" id="${id}-cp-c" title="show / hide the control panel (GNU Radio: Control Panel)">Control Panel</button></div><div class="grbody">
     <div class="grplot"><canvas id="${id}-iq" class="grcv"></canvas></div>
     <div class="grpanel" id="${id}-pan-c" style="display:none">
       ${grp('Axes', cb('cauto','Autoscale',false)+cb('cgrid','Grid',false)+cb('cax','Axis Labels',true)+pm('cr','Range'))}
       ${grp('Extras', btn('cstop','Stop')+btn('cpng','Save Image'))}
-    </div></div></div></div>
+    </div></div></div></div>`}
     <div class="grslot" data-slot="4"><div class="grsink" id="${id}-tile-a"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">AOA — polar (azimuth) <b>0 bearings</b></div><div class="grbody"><div class="grplot"><canvas id="${id}-polar" class="grcv"></canvas></div></div></div></div>
     <div class="grslot" data-slot="5"><div class="grsink" id="${id}-tile-d"><div class="grtitle" draggable="true" title="drag this title bar onto another plot to swap places">${cfg.tableTitle} <b id="${id}-cnt">0</b></div><div class="grtable"><table class="det"><thead>${cfg.tableHead}</thead><tbody id="${id}-tbody"></tbody></table></div></div></div>
   </div>`;
 }
 
 const SIGVIEWS = {
-  drone:{ id:"drone", kind:"drone", lockable:true,
+  drone:{ id:"drone", kind:"drone", lockable:true, noConst:true,
     title:"Drone Detection — CH1", sub:"A/RX1 · Wi‑Fi / LoRa / drone bands · every look = 10 ms switch + dwell",
     bands:["Wi‑Fi 2.4 2442","Wi‑Fi 5.2 5210","Wi‑Fi 5.8 5785","LoRa 896.5","Drone 433.9","FPV 1180","Video 5795"],
     timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections (detector verdicts: band peak over its floor)",
@@ -670,7 +671,7 @@ function ring(c,cx,cy,R,spokes){ c.strokeStyle='#c8c8c8'; c.lineWidth=1;
   for(let r=R;r>1;r-=R/3){ c.beginPath(); c.arc(cx,cy,r,0,7); c.stroke(); }
   c.beginPath(); for(let a=0;a<360;a+=spokes){ const t=a*Math.PI/180; c.moveTo(cx,cy); c.lineTo(cx+R*Math.sin(t),cy-R*Math.cos(t)); } c.stroke(); }
 // AOA polar plot: there is no AOA / DF stage yet -> empty, 0 bearings.
-function drawAOA(cv){ const g=grSize(cv); if(!g) return; const {c,w,h}=g, cx=w/2, cy=h/2, R=Math.min(w,h)/2-24;
+function drawAOA(cv){ const g=grSize(cv); if(!g) return; const {c,w,h}=g, cx=w/2, cy=h/2, R=Math.max(20,Math.min(w-100,h-56)/2);
   c.fillStyle=GR.bg; c.fillRect(0,0,w,h); c.fillStyle=GR.canvas; c.beginPath(); c.arc(cx,cy,R,0,7); c.fill(); ring(c,cx,cy,R,30);
   c.fillStyle=GR.ink; c.font='13px '+GRF; c.textAlign='center'; c.textBaseline='middle';
   c.fillText('0°',cx,cy-R-12); c.fillText('180°',cx,cy+R+12); c.fillText('90°',cx+R+16,cy); c.fillText('270°',cx-R-18,cy);
@@ -701,11 +702,11 @@ for(const k in SIGVIEWS){
     runW:true, wcm:'multi', wmin:-140, wmax:10, wver:0, wax:true, wgrid:false,
     runC:true, iqn:1024,
     gf:new GRPlot($('fft'),{ylim:[-140,10]}), gt:new GRPlot($('time'),{ylim:[-1,1],sym:true}),
-    gc:new GRPlot($('iq'),{ylim:[-2,2],xlim:[-2,2],sym:true}), pol:$('polar') };
+    gc:cf.noConst?null:new GRPlot($('iq'),{ylim:[-2,2],xlim:[-2,2],sym:true}), pol:$('polar') };
   const val=(k2,txt)=>{ const e=$(k2+'-v'); if(e) e.textContent=txt; };
   const showVals=()=>{ val('fyr',(st.gf.ylim[1]-st.gf.ylim[0]).toFixed(0)+' dB'); val('fref',st.gf.ylim[1].toFixed(0)+' dB'); val('flev',st.flev.toFixed(0)+' dB');
     val('tyo',((st.gt.ylim[0]+st.gt.ylim[1])/2).toFixed(3)); val('tyr','±'+((st.gt.ylim[1]-st.gt.ylim[0])/2).toPrecision(3)); val('txm',st.pts+' pts');
-    val('tlev',st.tlev.toPrecision(3)); val('tdel',st.tdel+' smp'); val('wmin',st.wmin.toFixed(0)); val('wmax',st.wmax.toFixed(0)); val('cr','±'+st.gc.ylim[1].toPrecision(3)); };
+    val('tlev',st.tlev.toPrecision(3)); val('tdel',st.tdel+' smp'); val('wmin',st.wmin.toFixed(0)); val('wmax',st.wmax.toFixed(0)); if(st.gc) val('cr','±'+st.gc.ylim[1].toPrecision(3)); };
   const re=()=>{ st.lastMsg=null; showVals(); };
   const on=(k2,fn)=>{ $(k2).onclick=fn; };
   // Frequency Sink
@@ -737,15 +738,17 @@ for(const k in SIGVIEWS){
   on('tstop',()=>{ st.runT=!st.runT; $('tstop').textContent=st.runT?'Stop':'Start'; re(); });
   on('tpng',()=>st.gt.png(id+'_time')); on('tcsv',()=>st.gt.csv(id+'_time'));
   // Constellation Sink
+  if(st.gc){
   $('cauto').onchange=e=>{ st.gc.autoY=e.target.checked; re(); };
   $('cgrid').onchange=e=>{ st.gc.grid=e.target.checked; st.gc.draw(); }; $('cax').onchange=e=>{ st.gc.labels=e.target.checked; st.gc.draw(); };
   on('cr-p',()=>{ const r=st.gc.ylim[1]*2; st.gc.ylim=[-r,r]; st.gc.xlim=[-r,r]; st.gc.zoom=[]; re(); });
   on('cr-m',()=>{ const r=st.gc.ylim[1]/2; st.gc.ylim=[-r,r]; st.gc.xlim=[-r,r]; st.gc.zoom=[]; re(); });
   on('cstop',()=>{ st.runC=!st.runC; $('cstop').textContent=st.runC?'Stop':'Start'; re(); });
   on('cpng',()=>st.gc.png(id+'_constellation'));
-  for(const x of ['f','t','c']){ const b=$('cp-'+x), p=$('pan-'+x);
+  }
+  for(const x of (st.gc?['f','t','c']:['f','t'])){ const b=$('cp-'+x), p=$('pan-'+x);
     b.onclick=()=>{ const show=p.style.display==='none'; p.style.display=show?'':'none'; b.classList.toggle('on',show);
-      st.lastMsg=null; setTimeout(()=>{ st.gf.draw(); st.gt.draw(); st.gc.draw(); },0); }; }
+      st.lastMsg=null; setTimeout(()=>{ st.gf.draw(); st.gt.draw(); if(st.gc) st.gc.draw(); },0); }; }
   st.ftm='free'; showVals();
   if(cf.lockable){
     $('lock').onchange=e=>{ const band=e.target.value;
@@ -800,27 +803,28 @@ function loop(ts){
         else if(!st.runF||!fTrig) st.gf.draw();
         if(st.runT){ const td=timeData(m,st); if(td){ st.gt.setData(td); document.getElementById(cf.id+'-tv').textContent='· '+m.band+(td.trig?' · triggered':'')+' · signal rms '+m.rms_dbfs+' dBFS'; } }
         else st.gt.draw();
-        if(st.runC){ const cd=constData(m,st); st.gc.setData(cd); document.getElementById(cf.id+'-pv').textContent='· '+cd.n+' points · '+(m.active?'signal':'noise'); }
+        if(st.gc && st.runC){ const cd=constData(m,st); st.gc.setData(cd); document.getElementById(cf.id+'-pv').textContent='· '+cd.n+' points · '+(m.active?'signal':'noise'); }
       }
       tickDetections(k);
     }else if(run && !m && st.lastMsg!==false){
-      st.lastMsg=false; st.gf.data=null; st.gt.data=null; st.gc.data=null; st.gf.blank('waiting for this band’s dwell…'); st.gt.blank('waiting for this band’s dwell…'); st.gc.blank('waiting for data…');
+      st.lastMsg=false; st.gf.data=null; st.gt.data=null; if(st.gc) st.gc.data=null; st.gf.blank('waiting for this band’s dwell…'); st.gt.blank('waiting for this band’s dwell…'); if(st.gc) st.gc.blank('waiting for data…');
       document.getElementById(cf.id+'-stat').textContent='● waiting for data'; document.getElementById(cf.id+'-stat').className='chip';
     }
     if(!st._aoa||ts-st._aoa>1000){ st._aoa=ts; drawAOA(st.pol); }
   }
 }
 setInterval(()=>{ try{ loop(performance.now()); }catch(e){ console.error('loop',e); } }, 33);
-window.addEventListener('resize',()=>{ for(const k in S){ S[k].gf.draw(); S[k].gt.draw(); S[k].gc.draw(); S[k]._aoa=0; S[k].lastMsg=null; } });
+window.addEventListener('resize',()=>{ for(const k in S){ S[k].gf.draw(); S[k].gt.draw(); if(S[k].gc) S[k].gc.draw(); S[k]._aoa=0; S[k].lastMsg=null; } });
 /* ---- one-frame layout: fit the grid to the window; tiles swap by dragging their title bar ---- */
 const TILE_ORDER=['tile-f','tile-t','tile-c','tile-a','tile-d'];
 function layoutKey(id){ return 'securecom.layout.'+id; }
 function saveLayout(id,slots){ try{ localStorage.setItem(layoutKey(id),JSON.stringify(slots.map(s=>{ const c=s.querySelector('.grsink'); return c?c.id:''; }))); }catch(e){} }
 function applyOrder(slots,ids){ ids.forEach((tid,i)=>{ const t=document.getElementById(tid); if(t&&slots[i]) slots[i].appendChild(t); }); }
-function redrawAll(){ for(const k in S){ S[k].lastMsg=null; S[k]._aoa=0; } setTimeout(()=>{ for(const k in S){ S[k].gf.draw(); S[k].gt.draw(); S[k].gc.draw(); } },0); }
+function redrawAll(){ for(const k in S){ S[k].lastMsg=null; S[k]._aoa=0; } setTimeout(()=>{ for(const k in S){ S[k].gf.draw(); S[k].gt.draw(); if(S[k].gc) S[k].gc.draw(); } },0); }
 function setupGrid(k){
   const id=SIGVIEWS[k].id, grid=document.getElementById(id+'-grid'); if(!grid) return;
   const slots=[...grid.querySelectorAll('.grslot')];
+  const defOrder=slots.map(s=>{ const c=s.querySelector('.grsink'); return c?c.id:''; });
   try{ const saved=JSON.parse(localStorage.getItem(layoutKey(id))||'null'); if(Array.isArray(saved)&&saved.length===slots.length&&saved.every(x=>document.getElementById(x))) applyOrder(slots,saved); }catch(e){}
   grid.querySelectorAll('.grtitle[draggable]').forEach(h=>h.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain',h.closest('.grsink').id); e.dataTransfer.effectAllowed='move'; }));
   slots.forEach(sl=>{
@@ -832,7 +836,7 @@ function setupGrid(k){
       saveLayout(id,slots); redrawAll(); });
   });
   const rb=document.getElementById(id+'-relayout');
-  if(rb) rb.onclick=()=>{ applyOrder(slots,TILE_ORDER.map(x=>id+'-'+x)); try{ localStorage.removeItem(layoutKey(id)); }catch(e){} redrawAll(); };
+  if(rb) rb.onclick=()=>{ applyOrder(slots,defOrder); try{ localStorage.removeItem(layoutKey(id)); }catch(e){} redrawAll(); };
 }
 function fitGrid(){
   const cf=SIGVIEWS[curView]; if(!cf) return; const g=document.getElementById(cf.id+'-grid'); if(!g) return;

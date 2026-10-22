@@ -55,6 +55,12 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 18:0x — user: "now remove that constellation plot also from CH1" — DONE, checked
+* CH1 view: constellation sink removed (CH3 / CH4 panels keep theirs until those channels are reviewed). CH1 one-frame layout now: Frequency +
+  Time on the left, AOA polar over the full right column, Detections row at the bottom. Reset layout uses the page's own default order.
+* A first edit broke the page (the condition around the multi-line constellation tile was closed after its first line → AOA and Detections
+  vanished); found in the browser and fixed. AOA radius now keeps the 0° / 90° / 180° / 270° labels inside the tile. 0 console errors at 1850 × 930.
+
 ### 2026-10-22 17:5x — user: "I should see all plots in 1 frame, and all plots should be draggable" — DONE, checked
 * CH1 view is a one-screen dashboard: grid sized to the window (Frequency + Time wide on the left, Constellation + AOA on the right,
   Detections row at the bottom); page width no longer capped. Checked at 1850 × 930 (the user's Chrome size): everything visible, no scrolling.
