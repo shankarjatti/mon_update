@@ -58,12 +58,42 @@ class StatefulDecimator:
 
 from ch2_header import decode_header, proto_for_band, KNOWN_PROTOS
 
+
+class Shifter:
+    """Phase-continuous frequency shift: y[n] = x[n] * exp(-j 2 pi f n / fs), phase carried across blocks."""
+    def __init__(self):
+        self.f = None
+        self.fs = None
+        self.ph = 0.0
+
+    def __call__(self, x, f, fs):
+        if f != self.f or fs != self.fs:
+            self.f, self.fs, self.ph = f, fs, 0.0
+        if not f:
+            return x
+        w = -2.0 * np.pi * f / fs
+        y = x * np.exp(1j * (self.ph + w * np.arange(x.size))).astype(np.complex64)
+        self.ph = float((self.ph + w * x.size) % (2.0 * np.pi))
+        return y.astype(np.complex64)
+
 OUT_RATE = 200000.0                       # the repo decoder's per-port rate
 PROTO_ORDER = ("dmr", "nxdn", "p25", "tetra")   # port = base + index
 
 def proto_ports(base=7001):
     return {p: base + i for i, p in enumerate(PROTO_ORDER)}
 
+# Decoder channel alignment. allinone.py channelizes each port into channels at k x (port rate / N)
+# around the port centre (DMR / NXDN: 16 x 12.5 kHz, channel 0 = 0 Hz) with a +-6.25 kHz filter each.
+# A radio more than ~2 kHz off a channel centre does not decode at all (measured 2026-10-22 with the
+# repo's own real DMR capture, tools/offline_decode_test.py: 0 / +-550 Hz off -> audio -20.5 / -23 dBFS,
+# 5.7 / 6.8 kHz off -> silence). CH2 tunes the DMR band at 446.100 MHz (scan plan), but the DMR446
+# channel raster is 446.10625 + n x 12.5 kHz (the bench radio measured 446.1193 MHz = 446.11875 + 0.55 kHz
+# radio error) -> every real channel sat 6.25 kHz between two decoder channels.
+# So the router shifts each port DIGITALLY (phase-continuous NCO) to put this centre at 0 Hz:
+# 446.11875 = the repo's own tuned DMR channel (its 446.118528 = 446.11875 minus the B210's 222 Hz error);
+# with it all 8 DMR446 channels land on decoder channels. Bands not listed: port centre = RF centre.
+DECODE_CENTRE_HZ = {"dmr": 446.11875e6}
+SETTLE_S = 0.014                          # = mon_server SETTLE_S (retune transient + in-flight samples)
 TICK_S = 0.02                             # sender cadence
 CHUNK_OUT = int(OUT_RATE * TICK_S)        # 4000 samples / tick
 ZERO_CHUNK = np.zeros(CHUNK_OUT, dtype=np.complex64).tobytes()
@@ -142,9 +172,21 @@ async def sub_loop(endpoint, ports, stats):
              OUT_RATE / 1e3), flush=True)
     last_dwell = {}
     decs = {}          # per-proto stateful decimators (continuous across blocks)
+    shifts = {}        # per-proto phase-continuous shifters (decoder channel alignment)
+    last_freq = None   # RF centre of the previous block (any band)
+    blank = 0          # input samples still to drop after a retune
     while True:
         hdr_b, iq_b = await sub.recv_multipart()
-        proto, samp_rate, dwell_id, dwell_start, band = _read_header(hdr_b)
+        proto, samp_rate, dwell_id, dwell_start, band, freq = _read_header(hdr_b)
+        # After a retune the first samples labelled with the NEW band are still the OLD frequency
+        # (in flight) plus the switch transient: measured 2026-10-22, the DMR radio (-9.6 dBFS) showed up
+        # on the NXDN / P25 / TETRA ports at -11.5 dBFS for the first ms of each of their looks. The
+        # detector skips SETTLE_S of every look; drop the same samples here so no protocol port / decoder
+        # ever gets another band's signal. (No retune = same freq = nothing dropped: a held lock streams on.)
+        if freq is not None and freq != last_freq:
+            if last_freq is not None:
+                blank = int(SETTLE_S * samp_rate)
+            last_freq = freq
         if proto not in ports:
             continue
         port = ports[proto]
@@ -157,6 +199,10 @@ async def sub_loop(endpoint, ports, stats):
                 decs[proto].reset()
             last_dwell[proto] = dwell_id
         x = np.frombuffer(iq_b, dtype=np.complex64)
+        if blank:
+            d = min(blank, x.size)
+            x = x[d:]
+            blank -= d
         if x.size == 0:
             continue
         # decimate to the decoder rate (CONTINUOUS, state carried across blocks)
@@ -166,6 +212,16 @@ async def sub_loop(endpoint, ports, stats):
             x = decs[proto](x)
             if x.size == 0:
                 continue
+        dc = DECODE_CENTRE_HZ.get(proto)
+        if dc is not None and freq is not None:
+            fs_out = samp_rate / dec
+            df = dc - float(freq)
+            if abs(df) < 0.4 * fs_out:          # only when that centre is inside the received band
+                if proto not in shifts:
+                    shifts[proto] = Shifter()
+                    print("[router] %s: decoder centre %.5f MHz = RF %.5f %+.2f kHz (digital shift)"
+                          % (proto, dc / 1e6, float(freq) / 1e6, df / 1e3), flush=True)
+                x = shifts[proto](x, df, fs_out)
         port.feed(x.tobytes())
         stats[proto] = stats.get(proto, 0) + 1
         if sum(stats.values()) % 100 == 0:
@@ -175,14 +231,14 @@ async def sub_loop(endpoint, ports, stats):
 
 
 def _read_header(hdr_b):
-    """Return (proto, samp_rate, dwell_id, dwell_start, band). Accepts the new
+    """Return (proto, samp_rate, dwell_id, dwell_start, band, freq_hz or None). Accepts the new
     ch2_header format; falls back to the old mon header (band only) so the router
     also works against the current mon_scan feed during migration."""
     try:
         h = decode_header(hdr_b)
         return (h["proto"], float(h.get("samp_rate", OUT_RATE)),
                 int(h.get("dwell_id", 0)), bool(h.get("dwell_start", False)),
-                h.get("band", ""))
+                h.get("band", ""), h.get("freq"))
     except ValueError:
         pass
     # legacy mon header: {ch,band,freq,look,frame,host_time}
@@ -190,9 +246,9 @@ def _read_header(hdr_b):
         h = json.loads(hdr_b.decode())
         band = h.get("band", "")
         return (proto_for_band(band), float(h.get("samp_rate", 2000000.0)),
-                int(h.get("frame", 0)), False, band)
+                int(h.get("frame", 0)), False, band, h.get("freq"))
     except Exception:
-        return ("unknown", OUT_RATE, 0, False, "")
+        return ("unknown", OUT_RATE, 0, False, "", None)
 
 
 async def main_async(endpoint, base_port):

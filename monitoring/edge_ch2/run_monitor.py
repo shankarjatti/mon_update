@@ -89,8 +89,9 @@ class Comp:
     """One supervised component."""
     def __init__(self, name, cmd, env, cwd, log, shell=False,
                  port=None, log_max_age=None, grace=4.0, stall=20.0,
-                 needs_x310=False):
+                 needs_x310=False, after=()):
         self.name = name
+        self.after = tuple(after)      # restart me whenever one of these restarts (I hold a client link to it)
         self.cmd = cmd                 # list (shell=False) or str (shell=True via bash -c)
         self.env = env
         self.cwd = cwd
@@ -193,13 +194,17 @@ def build(args):
     comps.append(Comp("ui_http", ["python3", "-m", "http.server", "8099",
                       "--bind", "127.0.0.1"], senv, MON_DIR,
                       "%s/ui_http.log" % LOGDIR, port=8099, grace=3.0))
+    #    console = our X310 copy of the terrestrial console (edge_ch2/ch2_console; backupv1 stays unchanged)
     comps.append(Comp("console_http", ["python3", "-m", "http.server", "8788",
-                      "--bind", "127.0.0.1"], senv, GUI,
+                      "--bind", "127.0.0.1"], senv, os.path.join(EDGE, "ch2_console"),
                       "%s/console_http.log" % LOGDIR, port=8788, grace=3.0))
 
     # 6) the decoder (allinone.py) - connects to the router's 7001-7004 as a client
+    #    Its network.tcp_source blocks connect ONCE and never reconnect: after a router restart the
+    #    decoder kept running on dead sockets with no input (seen 2026-10-22) -> restart it with the router.
     comps.append(Comp("allinone", ["python3", "-u", "allinone.py"],
-                      senv, REPO, "%s/allinone.log" % LOGDIR, grace=10.0, stall=25.0))
+                      senv, REPO, "%s/allinone.log" % LOGDIR, grace=10.0, stall=25.0,
+                      after=("ch2_router",)))
 
     # 7) live decoded voice to the PC speakers
     comps.append(Comp("terr_audio", ["python3", "-u", "terr_audio_play.py",
@@ -255,6 +260,14 @@ def main():
                     c.kill()
                     c.restarts += 1
                     c.start()
+                    for d in comps:
+                        if c.name in d.after:
+                            time.sleep(2.0)            # let the upstream open its ports first
+                            print("[watchdog] %s restarted -> restart %s (client of it)"
+                                  % (c.name, d.name), flush=True)
+                            d.kill()
+                            d.restarts += 1
+                            d.start()
     finally:
         print("[watchdog] stopping all components", flush=True)
         for c in comps:

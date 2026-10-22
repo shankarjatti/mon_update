@@ -14,6 +14,7 @@ for f in scan_plan.py mon_scan.py mon_server.py mon_pub.py mon_sub_example.py mo
 done
 mkdir -p "$M/monitoring/guru_mon_scan/tools"; cp -p "$R/guru_mon_scan/tools/render_gr_sinks.py" "$M/monitoring/guru_mon_scan/tools/" 2>/dev/null || true
 rsync -a --delete --exclude __pycache__ --exclude ch2_lock.txt --exclude ch2_mode.txt --exclude 'pin_ch*.txt' --exclude 'gain_ch*.txt' \
+      --exclude '*.wav' --exclude 'recordings/' --exclude '*.so' \
       "$R/edge_ch2/" "$M/monitoring/edge_ch2/"
 rsync -a --delete --exclude __pycache__ --exclude '*.wav' --exclude deps \
       "$R/terrestrial38/" "$M/monitoring/terrestrial38/"

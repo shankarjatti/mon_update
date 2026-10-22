@@ -122,7 +122,7 @@ class look_power(gr.sync_block):
 
     def nb(self):
         """Strongest narrowband line of the look: (dB over the median bin, offset Hz, level dBFS per bin,
-        segments averaged) or None. Level: a full-scale complex tone reads 0 dBFS."""
+        segments averaged, -10 dB occupied bandwidth Hz) or None. Level: a full-scale complex tone reads 0 dBFS."""
         with self._lock:
             if self._nseg < 3:
                 return None
@@ -135,8 +135,18 @@ class look_power(gr.sync_block):
             med = float(np.median(u))
             pk = float(u[j])
             f = float(self._f[self._use][j])
+            # occupied bandwidth of the line: contiguous bins around the peak within 10 dB of it.
+            # A 4FSK voice signal (DMR / P25 / NXDN, TETRA pi/4-DQPSK) spreads over ~4-25 kHz; a CW spur or a
+            # generator tone is one Hann main lobe (~2-3 bins).
+            jf = int(np.flatnonzero(self._use)[j])
+            lo = hi = jf
+            while lo > 0 and s[lo - 1] >= pk * 0.1:
+                lo -= 1
+            while hi < s.size - 1 and s[hi + 1] >= pk * 0.1:
+                hi += 1
+            bw = (hi - lo + 1) * self.fs / self.nfft
             return (10.0 * np.log10(pk / max(med, 1e-30)), f,
-                    10.0 * np.log10(pk / (self._win.sum() ** 2) + 1e-30), self._nseg)
+                    10.0 * np.log10(pk / (self._win.sum() ** 2) + 1e-30), self._nseg, bw)
 
     def sustained(self, min_s):
         """Level (dBFS) reached by at least min_s of the look's windows in total: the K-th largest window,

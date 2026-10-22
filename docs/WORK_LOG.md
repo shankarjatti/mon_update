@@ -19,7 +19,7 @@ decisions taken, and what comes next. Only measured facts; anything not verified
 | **Run monitoring** | `sudo nmcli connection up usrp` (NIC must be 192.168.10.1/24) → X310 on, 4 antennas → `cd ~/radar2/edge_ch2 && python3 -u run_monitor.py --gain 25 --ch2-gain 10 --samp-rate 1e6 --squelch -45` → UI http://127.0.0.1:8099/securecom_ui.html → stop with ONE Ctrl-C. Checked 2026-10-22 (files, toolchain, modules, ports; hardware not run) |
 | **CH1 — APPLIED 2026-10-22 ("update all things related to cha 1")** | **Later the same day (15–16 h): DC removal on all channels, sample-accurate detector (look_power, 14 ms skip, 0.5 ms peak, 2.5 dB margin), CH1 band lock from the UI (MON plan / one band), GNU Radio-style graphs + waterfall, binary per-view feed (lag fix), continuous traces — see the 15:xx–16:xx entry.** DroneID listen = 2000 ms dwell (frame 14,256 ms, 47 looks: conventional ×10 [Wi-Fi 2.4 / 5.2 / 5.8 / LoRa SF7] + DroneID ×1 + unconventional ×2 [433 / FPV 1080–1280 / Video 5645–5945]); CH1 UI graphs rebuilt (GNU Radio style); `samp_rate` added to every published header (also fixed the CH2 router rate bug). Details: the 2026-10-22 13:xx entry |
 | **PENDING EDITS — NOT APPLIED (user: "I tell all edits at once")** | **CH1 still open:** DroneID listen FREQUENCY (placeholder 2442 MHz); detector = peak over the whole dwell (suggested, NOT approved; affects every channel). **CH2, CH3, CH4 — not reviewed yet** (known: CH3 dwell 160 and CH4 dwell 20 are the sim's look totals, switch counted twice; CH2 gaps listed below). The UI "Monitoring Backend" copy of CH2–CH4 is still the old saved list |
-| **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) no proof yet of one correct terrestrial decode; (7) **CH2 power is dominated by the DC spur (≈ 100 % within ±3 kHz of DC, −57 dBFS on every band) → floor is the spur**; (8) CH2 console centres ≠ scan plan, saves a .wav per dwell, shows "B210"; (9) UI ACTIVE flag always on (bridge floor bug); (10) load ≈ 10 on 12 cores; (11) **RX1 ports (CH1, CH3) have a huge DC offset (−6 / −8 dBFS) and ≈ 30 dB more noise than the RX2 ports; the CH1 centre spike is DC, not a signal; the scanner's detector still counts the DC so CH1 can hardly read ACTIVE** (see the 14:xx entry). See the 2026-10-22 entries (12:0x, 11:5x) |
+| **Monitoring gaps found 2026-10-22** | (1) each look ≈ 1 MHz at the band centre, not 80 MHz; (2) detector reads only the last 1–2 ms of a dwell; (3) CH3 "ACTIVE" is energy only; (4) `scan_plan.py` adds the 10 ms switch twice for CH3 (160), CH4 (20), DroneID (2010); (5) host `sleep` timing, host-time tags, no LO-lock read in `mon_server.py`; (6) ~~no proof yet of one correct terrestrial decode~~ DMR decodes after the 17:4x channel-alignment fix (long-run + false locks still open); (7) **CH2 power is dominated by the DC spur (≈ 100 % within ±3 kHz of DC, −57 dBFS on every band) → floor is the spur**; (8) ~~CH2 console centres ≠ scan plan, saves a .wav per dwell, shows "B210"~~ FIXED 17:4x (X310 console copy, verdict-gated recording); (9) UI ACTIVE flag always on (bridge floor bug); (10) load ≈ 10 on 12 cores; (11) **RX1 ports (CH1, CH3) have a huge DC offset (−6 / −8 dBFS) and ≈ 30 dB more noise than the RX2 ports; the CH1 centre spike is DC, not a signal; the scanner's detector still counts the DC so CH1 can hardly read ACTIVE** (see the 14:xx entry). See the 2026-10-22 entries (12:0x, 11:5x) |
 | **DF side of the design (`~/radar2/monitoring_sim.html`)** | NOT built: request path, priority scheduler (drone ×5 / others ×2), manual approve, emergency, DF Pub-Sub + AOA. Only the MON↔DF switch itself is proven (guru_switch). Field calibration with real antennas still undecided |
 | Working system | **guru_switch** (`~/radar2/guru_switch`, `./run_hop.sh --switch`): DF (shared LO, 2.4 → 5.2 → 5.8 GHz, 7 ms switching + 5 ms dwell, burst, 2 MS/s) + MON (own LO per channel: ch0 900 MHz, ch1 2.4, ch2 5.2, ch3 5.8 GHz, ONE continuous stream) in one program; mode changed ONLY by hand with the MODE selector (control API off by default) |
 | Proven | DF phase after returning from MON ≤ 0.33° (same as a plain retune); switch ~20–33 ms request → first dwell; 30-min run 2026-09-30 18:12–18:42: 0 TIMING LOST, 0 errors, HackRF 0 stalls |
@@ -54,6 +54,41 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 ---
 
 ## 2026-10-22
+
+### 2026-10-22 17:4x — user: "decoding of terrestrial is not working correctly ... use that repo of terrestrial" + "CH2 UI not showing correctly ... set it for current hardware" — DMR DECODE ROOT CAUSE FIXED (VERIFIED), CH2 CONSOLE ON THE X310 (VERIFIED), long-run + false-lock still OPEN
+* **Root cause, DMR decode (proven):** the repo's decoder (`allinone.py`, unchanged) splits each port into 16 channels at k × 12.5 kHz
+  around 0 Hz, each ±6.25 kHz wide. The repo tuned its B210 to 446.118528 MHz on purpose (README §5: radio measured, centred in channel 0).
+  CH2 tunes 446.100 MHz (scan plan); the detector measured the bench radio at **446.1191–446.1195 MHz = +19.3 kHz**, i.e. 5.7 / 6.8 kHz
+  from the two nearest decoder channels. Repo's own real DMR capture through the repo's offline test: radio 0 Hz / ±550 Hz off a channel →
+  audio −20.5 / −21.6 / −23.2 dBFS; **5.7 or 6.8 kHz off → silence**. Same capture placed at our RF tune, through allinone's exact DMR chain
+  (16-ch channelizer, 96/25 resampler, LPF, demod 1.0, DSD): **before = silence on all 16 channels; after the fix = channel 0 decodes,
+  −22.7 dBFS audio.**
+* **Fix:** `ch2_header_router.py` shifts each port digitally (phase-continuous NCO) so `DECODE_CENTRE_HZ` sits at 0 Hz: DMR 446.11875 MHz
+  (the repo's channel; its 446.118528 = 446.11875 − the B210's 222 Hz error) → the whole DMR446 raster 446.10625 + n × 12.5 kHz lands on
+  decoder channels. RF plan and detection unchanged. NXDN / P25 / TETRA: no shift (no live radio to measure their raster yet).
+  Live after the fix: DSD voice frames 6.8 % symbol errors, 0 sync losses in the first lock.
+* **Router also drops the first 14 ms after every retune** (= the detector's SETTLE_S). Measured before: while searching, the DMR radio
+  (−9.6 dBFS) appeared on the NXDN / P25 / TETRA ports at −11.5 dBFS for the first ms of their looks (old-frequency samples in flight),
+  so those decoders and the console saw "DMR on other protocols". A held lock (no retune) is not touched.
+* **Auto-lock hold no longer retunes every dwell** (`mon_server.py`): it retuned 446.1 MHz every 150 ms while holding → switch transient
+  + phase jump in the decoder's stream. Now tuned once per lock.
+* **Watchdog:** allinone.py's `tcp_source` connects once and never reconnects — after a router restart the decoder ran on dead sockets
+  (seen live). `run_monitor.py` now restarts allinone together with the router (`after=("ch2_router",)`).
+* Checked, NOT a cause: decoder squelch −30 dB opens down to ≈ −54 dBFS at the port (channelizer +24 dB); DSD over time — 6 key-ups
+  in 64 s with 0.5–30 s zero/noise gaps all decode (−21…−31 dBFS); router → decoder socket backlog 0; allinone 68 % CPU.
+* **CH2 console for the current hardware** (`edge_ch2/ch2_console/securecom_gui.html` = copy of the repo console; backupv1 unchanged;
+  served on 8788; main-UI iframe cache-busted). All tabs/features kept. Hardware tab: USRP-2945 (X310 31082D8) TwinRX A/RX2, 1 GbE, CH2
+  mode + lock, **real TwinRX LO lock** (new `lo_locked` in each verdict, sensor read ≤ every 2 s), live CH2 gain 0–99 dB (gain_ch2.txt, no
+  restart), MON frame #, decoder connections (allinone per port). Bands = real port centres + scan-plan dwell (446.11875 / 451.0 / 450.0 /
+  420.0; 150 / 200 / 450 / 142 ms). Bridge (`backupv1_bridge_ext.py`): band ACTIVE and the recording gate = the detector's verdict for that
+  band (was the repo's −60 dBFS level, which fired on transients and noise); no second allinone ("Start decoder" attaches the audio taps);
+  auto-connect + auto-attach. Verified in the browser (console and main-UI CH2 panel).
+* **OPEN (user: "works initially, not for a long time"):** (a) after a key-up ends, the lock is released after 2 silent dwells (300 ms) and a
+  new key-up needs 2 full search cycles (≈ 2 s) before it is held again; (b) **false locks on P25 / NXDN**: all 22 non-DMR CH2 detections of
+  the run came while the DMR radio was keyed close by, each a line exactly ±25 kHz from whatever frequency CH2 was tuned to (449.975,
+  450.025, 451.025, 420.026 …), sometimes stronger than the DMR signal → near-field coupling into the receiver, not a P25/NXDN signal. The
+  detector now reports the line's −10 dB occupied bandwidth (`nb_bw_khz`; 4FSK voice ≈ 4–10 kHz, a spur ≈ 1 kHz) to set a gate from
+  measurements; timestamped verdict + port/audio monitors running for the next key-ups.
 
 ### 2026-10-22 20:3x — user (keying a DMR radio, 446.0–446.2 MHz): "why is it detected in NXDN and P25? it should not" — FIXED, VERIFIED
 * MEASURED (32 s, radio keyed): every P25 / NXDN / TETRA hit was a 0.5–1 ms broadband pulse at 0 Hz (110–190 kHz wide) — the CH2 artefact seen

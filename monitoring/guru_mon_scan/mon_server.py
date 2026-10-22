@@ -111,6 +111,7 @@ class mon_server(gr.top_block):
             self.src.set_gain(g, ch)
             print("[setup] CH%d gain = %.0f dB (range %.0f..%.0f dB)" % (ch + 1, g, rng.start(), rng.stop()), flush=True)
         self._gain = {ch: float(self.src.get_gain(ch)) for ch in range(NCH)}
+        self._lo_cache = {}
         self._gain_rng = {ch: (self.src.get_gain_range(ch).start(), self.src.get_gain_range(ch).stop()) for ch in range(NCH)}
         self._gain_cache = {}
 
@@ -265,6 +266,19 @@ class mon_server(gr.top_block):
             del self.floor[k]
         print("[gain] CH%d RX gain -> %.1f dB (UI); band floors of CH%d reset" % (ch + 1, self._gain[ch], ch + 1), flush=True)
 
+    def _lo_locked(self, ch):
+        """Real TwinRX 'lo_locked' sensor of this channel (read at most every 2 s; None if unreadable)."""
+        c = self._lo_cache.get(ch)
+        now = time.time()
+        if c and now - c[0] < 2.0:
+            return c[1]
+        try:
+            v = bool(self.src.get_sensor("lo_locked", ch).to_bool())
+        except Exception:
+            v = None
+        self._lo_cache[ch] = (now, v)
+        return v
+
     def _measure(self, ch, name, freq, idx, frame_no, dwell_ms, retune=True):
         """Tune, tag, settle+dwell, return (db, active). Logs active bands.
         retune=False (band lock, same band again): no retune and no switch wait."""
@@ -312,7 +326,7 @@ class mon_server(gr.top_block):
                 active = True
                 print("[ACTIVE] %s %-18s %.4f MHz  %6.1f dBFS  (floor %6.1f)%s"
                       % (CH_NAME[ch][:3], name, freq / 1e6, db, fl,
-                         ("  narrowband line %.6f MHz %+.1f dB" % ((freq + nb[1]) / 1e6, nb[0])) if nb_on else ""), flush=True)
+                         ("  narrowband line %.6f MHz %+.1f dB bw %.1f kHz" % ((freq + nb[1]) / 1e6, nb[0], nb[4] / 1e3)) if nb_on else ""), flush=True)
                 with self.loglock:
                     self.log.write("%s,%d,%s,%s,%.4f,%.1f,%.1f\n"
                                    % (time.strftime("%Y-%m-%dT%H:%M:%S"), ch,
@@ -328,8 +342,11 @@ class mon_server(gr.top_block):
                         "nb_db": None if nb is None else round(nb[0], 1),
                         "nb_mhz": None if nb is None else round((freq + nb[1]) / 1e6, 6),
                         "nb_dbfs": None if nb is None else round(nb[2], 1),
+                        "nb_bw_khz": None if nb is None else round(nb[4] / 1e3, 2),
                         "nb_active": bool(nb_on), "power_active": bool(power_on),
-                        "dwell_ms": float(dwell_ms), "t": time.time()}), flags=zmq.NOBLOCK)
+                        "dwell_ms": float(dwell_ms), "t": time.time(),
+                        "gain_min": self._gain_rng[ch][0], "gain_max": self._gain_rng[ch][1],
+                        "lo_locked": self._lo_locked(ch)}), flags=zmq.NOBLOCK)
                 except Exception:
                     pass
         return db, active
@@ -349,6 +366,7 @@ class mon_server(gr.top_block):
         best = {}            # name -> (db, freq, dwell)  best power seen this search pass
         act_cyc = {}         # name -> how many of this pass's cycles the band was active
         held = None          # (name, freq, dwell) currently held/decoded
+        held_tuned = False   # the held band is already tuned (no retune per dwell)
         silent_dwells = 0    # consecutive silent dwells on the held band
         held_pin = None      # band the UI locked this channel to (None = MON plan)
         while self._run:
@@ -374,7 +392,10 @@ class mon_server(gr.top_block):
                 # ---- HOLD the locked protocol (dwell = the band's own planned dwell) ----
                 if held is not None:
                     name, freq, dwell = held
-                    db, active = self._measure(ch, name, freq, 0, frame_no, dwell)
+                    # tune ONCE when the lock starts, then stay on frequency: a retune every dwell
+                    # broke the decoder's continuous stream (switch transient + phase jump each 150 ms)
+                    db, active = self._measure(ch, name, freq, 0, frame_no, dwell, retune=not held_tuned)
+                    held_tuned = True
                     if active:
                         silent_dwells = 0
                     else:
@@ -409,7 +430,7 @@ class mon_server(gr.top_block):
                                 cand[n] = (d, fq, dw)
                         if cand:
                             name, (db, freq, dwell) = max(cand.items(), key=lambda kv: kv[1][0])
-                            held = (name, freq, dwell); silent_dwells = 0
+                            held = (name, freq, dwell); silent_dwells = 0; held_tuned = False
                             print("[CH2 auto] LOCK '%s' %.1f dBFS (sustained, strongest) -> hold/decode"
                                   % (name, db), flush=True)
                             self._set_ch2_status("lock|%s|%.4f" % (name, freq / 1e6))

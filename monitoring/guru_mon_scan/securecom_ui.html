@@ -321,17 +321,18 @@ for(const k in SIGVIEWS){ document.getElementById('view-'+k).innerHTML = signalV
 // Served over http (serve_ui.sh from radar2 root): use same-origin relative paths
 // so iframes load in every browser. Opened directly as file://: use absolute file
 // paths (works in Firefox; Chrome blocks cross-folder file:// iframes -> use serve_ui.sh).
-// CH2 land console = the WORKING 4-protocol backupv1 console, served on its own
-// web server (8788) and connected to our live bridge (ws 8787) that the X310
-// scheduler+router feed. Absolute URL so it loads from any origin.
+// CH2 land console = the terrestrial repo's 4-protocol console, our X310 copy (edge_ch2/ch2_console:
+// USRP-2945 CH2 status, real scan-plan bands, detector-gated ACTIVE/recording, live gain), served on
+// 8788 and connected to the live bridge (ws 8787). Absolute URL so it loads from any origin; ?v= stops
+// the browser from showing a cached old copy after an update.
 const REPO = (location.protocol==='file:')
   ? "file:///home/shankar/radar2/terrestrial_src"
   : "/terrestrial_src";
-const TERR_SRC = { land: "http://127.0.0.1:8788/securecom_gui.html",
+const TERR_SRC = { land: "http://127.0.0.1:8788/securecom_gui.html?v=" + Date.now(),
                    air: REPO+"/airmaritime_console.html" };
 document.getElementById('view-terr').innerHTML = `
   <h1>Terrestrial Radio — CH2</h1>
-  <div class="sub">A/RX2 · validated 4‑protocol console · CH2 scheduler → header router → decoder</div>
+  <div class="sub">USRP-2945 TwinRX A/RX2 · 200 kS/s per band · CH2 scan / auto lock → header router → allinone.py decoder</div>
   <div class="bar">
     <div class="chips">
       <label style="font-weight:600;color:var(--ink)">CH2 mode</label>

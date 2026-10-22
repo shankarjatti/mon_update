@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SecureCOM — COUPLING Console</title>
+<style>
+:root{
+  --bg:        #f4f5f7;
+  --panel:     #ffffff;
+  --panel2:    #eceef1;
+  --border:    #d3d7dd;
+  --text:      #1f2329;
+  --text-dim:  #4d545e;
+  --text-mute: #7b838e;
+  --accent:    #1a5f8a;
+  --ok:        #1f7a4d;
+  --warn:      #9a6a08;
+  --bad:       #b02a2a;
+  --grid:      #e4e7eb;
+  --trace-dmr: #1a5f8a;
+  --trace-nxdn:#b02a2a;
+  --trace-p25: #1f7a4d;
+  --trace-tetra:#9a6a08;
+  --mono: 'DejaVu Sans Mono','Consolas',monospace;
+  --sans: 'Segoe UI',Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg); color:var(--text); font-family:var(--sans);
+  height:100vh; display:grid; grid-template-rows:44px 1fr 190px;
+  overflow:hidden; font-size:13px;
+}
+
+/* ───────── header ───────── */
+header{
+  background:var(--panel); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:18px; padding:0 14px;
+}
+.h-title{font-weight:600; letter-spacing:.03em; font-size:14px;}
+.h-sub{color:var(--text-dim); font-size:11px;}
+.h-spacer{flex:1;}
+.badge{
+  font-family:var(--mono); font-size:11px; padding:3px 9px; border-radius:3px;
+  border:1px solid var(--border); display:flex; align-items:center; gap:6px;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text-mute);}
+.dot.ok{background:var(--ok);}
+.dot.bad{background:var(--bad);}
+.dot.warn{background:var(--warn); animation:pulse 1.4s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.h-clock{font-family:var(--mono); color:var(--text-dim); font-size:12px;}
+
+/* ───────── main layout ───────── */
+main{display:grid; grid-template-columns:1fr 300px; overflow:hidden;}
+.graphs{display:grid; grid-template-rows:1fr 1fr 100px; overflow:hidden; border-right:1px solid var(--border);}
+.graph-box{position:relative; border-bottom:1px solid var(--border); overflow:hidden;}
+.graph-box canvas{display:block; width:100%; height:100%;}
+.graph-label{
+  position:absolute; top:4px; left:8px; font-family:var(--mono); font-size:10px;
+  color:var(--text-dim); z-index:2; letter-spacing:.05em; pointer-events:none;
+}
+.graph-readout{
+  position:absolute; top:4px; right:8px; font-family:var(--mono); font-size:10px;
+  color:var(--text-dim); z-index:2; pointer-events:none; text-align:right;
+}
+.zoom-reset{
+  position:absolute; bottom:4px; right:8px; font-family:var(--mono); font-size:10px;
+  background:var(--panel2); border:1px solid var(--border); color:var(--text-dim);
+  padding:2px 7px; border-radius:2px; cursor:pointer; z-index:3;
+}
+.zoom-reset:hover{color:var(--text); border-color:var(--accent);}
+.legend{position:absolute; bottom:4px; left:8px; display:flex; gap:10px; z-index:2;
+  font-family:var(--mono); font-size:9.5px; color:var(--text-dim);}
+.legend span{display:flex; align-items:center; gap:4px;}
+.legend i{width:8px;height:8px;display:inline-block;border-radius:1px;}
+
+/* ───────── sidebar ───────── */
+.sidebar{display:flex; flex-direction:column; overflow:hidden;}
+.tabs{display:flex; border-bottom:1px solid var(--border); flex-shrink:0;}
+.tab{
+  flex:1; text-align:center; padding:8px 4px; font-size:11px; cursor:pointer;
+  color:var(--text-dim); border-right:1px solid var(--border); user-select:none;
+}
+.tab:last-child{border-right:none;}
+.tab.active{color:var(--text); background:var(--panel2); border-bottom:2px solid var(--accent);}
+.tab-panel{flex:1; overflow-y:auto; padding:10px; display:none;}
+.tab-panel.active{display:block;}
+
+table.info{width:100%; border-collapse:collapse; font-size:11.5px;}
+table.info th{
+  text-align:left; color:var(--text-dim); font-weight:500; font-size:10px;
+  padding:4px 4px; border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:.04em;
+}
+table.info td{padding:5px 4px; border-bottom:1px solid var(--grid); font-family:var(--mono);}
+tr.row-dmr td.chip{color:var(--trace-dmr);}
+tr.row-nxdn td.chip{color:var(--trace-nxdn);}
+tr.row-p25 td.chip{color:var(--trace-p25);}
+tr.row-tetra td.chip{color:var(--trace-tetra);}
+.state-idle{color:var(--text-mute);}
+.state-active{color:var(--ok);}
+.state-decoding{color:var(--warn); font-weight:600;}
+
+.hw-row{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--grid); font-size:11.5px;}
+.hw-row .k{color:var(--text-dim);}
+.hw-row .v{font-family:var(--mono);}
+.hw-row .v.ok{color:var(--ok);}
+.hw-row .v.bad{color:var(--bad);}
+.btnrow{display:flex; gap:6px; margin-top:10px;}
+button{
+  background:var(--panel2); border:1px solid var(--border); color:var(--text);
+  padding:6px 10px; border-radius:3px; font-size:11px; cursor:pointer; font-family:var(--sans);
+}
+button:hover{border-color:var(--accent);}
+button.danger:hover{border-color:var(--bad); color:var(--bad);}
+button.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+button:disabled{opacity:.4; cursor:not-allowed;}
+label.small{font-size:10.5px; color:var(--text-dim); display:block; margin:10px 0 3px;}
+input[type=range]{width:100%;}
+input[type=number]{
+  width:64px; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+  font-family:var(--mono); font-size:11px; padding:3px 5px; border-radius:2px;
+}
+
+.sched-row{display:grid; grid-template-columns:56px 1fr 1fr; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--grid);}
+.sched-row .name{font-family:var(--mono); font-size:11px;}
+.sched-field{display:flex; flex-direction:column; gap:2px;}
+.sched-field .lbl{font-size:9px; color:var(--text-mute);}
+
+.rec-item{display:flex; align-items:center; gap:8px; padding:6px 2px; border-bottom:1px solid var(--grid); font-size:11px;}
+.rec-item .meta{flex:1; min-width:0;}
+.rec-item .fn{font-family:var(--mono); font-size:10.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rec-item .ts{color:var(--text-dim); font-size:9.5px;}
+.rec-item button{padding:3px 8px; font-size:10px;}
+.rec-empty{color:var(--text-mute); font-size:11px; text-align:center; padding:20px 0;}
+
+/* ───────── bottom strip: audio + console ───────── */
+.bottom{display:grid; grid-template-columns:300px 1fr; border-top:1px solid var(--border); overflow:hidden;}
+.audio{padding:8px 10px; overflow-y:auto; border-right:1px solid var(--border);}
+.audio-title{font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;}
+.audio-ch{display:flex; align-items:center; gap:8px; padding:4px 0;}
+.audio-ch .nm{width:56px; font-family:var(--mono); font-size:10.5px;}
+.meter{flex:1; height:8px; background:var(--panel2); border-radius:2px; overflow:hidden; border:1px solid var(--border);}
+.meter i{display:block; height:100%; width:2%; background:var(--text-mute); transition:width .12s linear;}
+.audio-ch.live .meter i{background:var(--ok);}
+.rec-dot{width:7px;height:7px;border-radius:50%; background:var(--text-mute); flex-shrink:0;}
+.rec-dot.on{background:var(--bad); animation:pulse 1s infinite;}
+
+.console{padding:8px 10px; overflow-y:auto; font-family:var(--mono); font-size:11px; line-height:1.55;}
+.console .ln{white-space:pre;}
+.console .ln.dmr{color:var(--trace-dmr);}
+.console .ln.nxdn{color:var(--trace-nxdn);}
+.console .ln.p25{color:var(--trace-p25);}
+.console .ln.tetra{color:var(--trace-tetra);}
+.console .ln.sys{color:var(--text-dim);}
+.console .ln .t{color:var(--text-mute);}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="h-title">SECURECOM — COUPLING CONSOLE</div>
+    <div class="h-sub">Terrestrial Radio Decoder · DMR / NXDN / P25 / TETRA</div>
+  </div>
+  <div class="h-spacer"></div>
+  <div class="badge"><span class="dot warn" id="dotSystem"></span><span id="lblSystem">NOT CONNECTED</span></div>
+  <div class="badge"><span class="dot ok" id="dotHw"></span><span id="lblHw">USRP-2945 · CH2 · not connected</span></div>
+  <div class="h-clock" id="clock">--:--:--</div>
+</header>
+
+<main>
+  <div class="graphs">
+    <div class="graph-box" id="boxSpectrum">
+      <canvas id="cvSpectrum"></canvas>
+      <div class="graph-label">FREQUENCY  —  drag to zoom, wheel to scale, dbl-click to reset</div>
+      <div class="graph-readout" id="roSpectrum">span 5.000 MHz</div>
+      <div class="legend">
+        <span><i style="background:var(--trace-dmr)"></i>DMR</span>
+        <span><i style="background:var(--trace-nxdn)"></i>NXDN</span>
+        <span><i style="background:var(--trace-p25)"></i>P25</span>
+        <span><i style="background:var(--trace-tetra)"></i>TETRA</span>
+      </div>
+      <div class="zoom-reset" data-reset="spectrum">reset zoom</div>
+    </div>
+    <div class="graph-box" id="boxWaterfall">
+      <canvas id="cvWaterfall"></canvas>
+      <div class="graph-label">WATERFALL</div>
+      <div class="graph-readout" id="roWaterfall">last 30s</div>
+      <div class="zoom-reset" data-reset="waterfall">reset zoom</div>
+    </div>
+    <div class="graph-box" id="boxTime">
+      <canvas id="cvTime"></canvas>
+      <div class="graph-label">TIME</div>
+      <div class="graph-readout" id="roTime">active: —</div>
+      <div class="zoom-reset" data-reset="time">reset zoom</div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="tabs">
+      <div class="tab active" data-tab="signals">Signals</div>
+      <div class="tab" data-tab="hardware">Hardware</div>
+      <div class="tab" data-tab="schedule">Schedule</div>
+      <div class="tab" data-tab="recordings">Recordings</div>
+    </div>
+
+    <div class="tab-panel active" id="panel-signals">
+      <table class="info" id="signalsTable">
+        <tr><th>Band</th><th>Freq MHz</th><th>State</th><th>Ch</th></tr>
+      </table>
+      <label class="small" style="margin-top:14px;">Channel activity (measured per channelizer channel)</label>
+      <table class="info" id="chanTable">
+        <tr><th>Ch</th><th>Offset kHz</th><th>Level dB</th></tr>
+        <tr><td colspan="3" style="color:var(--text-mute)">no active band</td></tr>
+      </table>
+      <label class="small" style="margin-top:14px;">Decoded field</label>
+      <table class="info" id="decodeTable">
+        <tr><th>Key</th><th>Value</th></tr>
+        <tr><td colspan="2" style="color:var(--text-mute)">no active decode</td></tr>
+      </table>
+    </div>
+
+    <div class="tab-panel" id="panel-hardware">
+      <div class="hw-row"><span class="k">Device</span><span class="v" id="hwDevice">USRP-2945 (X310) · CH2</span></div>
+      <div class="hw-row"><span class="k">Link</span><span class="v" id="hwUsb">—</span></div>
+      <div class="hw-row"><span class="k">CH2 mode</span><span class="v" id="hwMode">—</span></div>
+      <div class="hw-row"><span class="k">CH2 lock</span><span class="v" id="hwLockBand">—</span></div>
+      <div class="hw-row"><span class="k">LO lock</span><span class="v" id="hwLock">—</span></div>
+      <div class="hw-row"><span class="k">Sample rate</span><span class="v">200 kSps per band (1 MS/s → low-pass ±90 kHz → ÷5)</span></div>
+      <div class="hw-row"><span class="k">RX gain (CH2)</span><span class="v" id="hwGainVal">—</span></div>
+      <input type="range" id="hwGain" min="0" max="93" value="10">
+      <button id="btnApplyGain" style="margin-top:6px;">Apply gain (live, no restart)</button>
+      <div class="hw-row"><span class="k">MON frame #</span><span class="v" id="hwCycle">0</span></div>
+      <div class="hw-row"><span class="k">Decoder ports</span><span class="v" id="hwClients">0 / 4</span></div>
+      <div class="btnrow">
+        <button class="primary" id="btnHwStart">Connect CH2 feed</button>
+        <button class="danger" id="btnHwStop">Disconnect</button>
+      </div>
+      <div class="hw-row" style="margin-top:14px;"><span class="k">Decoder (allinone.py)</span><span class="v" id="decStatus">stopped</span></div>
+      <div class="btnrow">
+        <button class="primary" id="btnDecStart">Listen (enable audio)</button>
+        <button class="danger" id="btnDecStop">Detach</button>
+      </div>
+      <div style="margin-top:12px; font-size:10.5px; color:var(--text-mute); line-height:1.5;" id="hwNote">
+        Connecting to bridge…
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-schedule">
+      <div class="sched-row" style="font-size:10px;color:var(--text-mute);">
+        <div>BAND</div>
+        <div class="sched-field"><div class="lbl">DWELL (ms)</div></div>
+        <div class="sched-field"><div class="lbl">RF / PORT CENTRE (MHz)</div></div>
+      </div>
+      <div id="schedRows"></div>
+      <div class="btnrow">
+        <button class="primary" id="btnApplySched">Apply</button>
+        <button id="btnResetSched">Reset defaults</button>
+      </div>
+      <div style="margin-top:10px; font-size:10.5px; color:var(--text-mute); line-height:1.5;" id="schedNote">
+        Real CH2 values from the MON scan plan (<code>scan_plan.py</code>): each protocol band is visited for its
+        dwell, 8 cycles per CH2 frame (Mode 1), or searched and held when active (Mode 2, auto lock).
+        Port centre = the frequency at 0 Hz of the decoder port (DMR is shifted digitally so its channel raster
+        lands on the decoder's channels). Dwell is set in the scan plan, not from this console.
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-recordings">
+      <div class="btnrow" style="margin-top:0;margin-bottom:8px;">
+        <button id="btnRecRefresh">Refresh</button>
+        <button class="danger" id="btnRecDeleteAll">Delete all</button>
+      </div>
+      <div id="recList"><div class="rec-empty">no recordings yet</div></div>
+      <div style="margin-top:10px; font-size:10.5px; color:var(--text-mute); line-height:1.5;">
+        Entries here are real: bridge_server.py writes an actual .wav file
+        whenever a protocol's real decoded audio (tapped from allinone.grc's
+        audio_mix_* blocks) crosses the activity threshold, and the entry
+        appears once the file is closed. Play streams the real saved file.
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="bottom">
+  <div class="audio">
+    <div class="audio-title">Audio</div>
+    <div class="audio-ch" data-b="dmr"><span class="rec-dot"></span><span class="nm">DMR</span><div class="meter"><i></i></div></div>
+    <div class="audio-ch" data-b="nxdn"><span class="rec-dot"></span><span class="nm">NXDN</span><div class="meter"><i></i></div></div>
+    <div class="audio-ch" data-b="p25"><span class="rec-dot"></span><span class="nm">P25</span><div class="meter"><i></i></div></div>
+    <div class="audio-ch" data-b="tetra"><span class="rec-dot"></span><span class="nm">TETRA</span><div class="meter"><i></i></div></div>
+  </div>
+  <div class="console" id="console"></div>
+</div>
+
+<script>
+/* ============================================================
+   SecureCOM COUPLING console — front end only.
+   Data source is SIM_MODE: a local generator standing in for a
+   real feed (WebSocket from Module1/Module2). Swap feedIQ()/feedEvent()
+   calls for real socket handlers when that plumbing exists — the
+   rendering/state code below does not care where samples come from.
+   ============================================================ */
+
+const BANDS = [
+  // CH2 of the USRP-2945: freq = centre of the decoder port (0 Hz); rf = where CH2 tunes; dwell = scan plan (ms).
+  // Placeholders until the bridge's first 'status' brings the real scan-plan values.
+  {key:'dmr',   name:'DMR446',  freq:446.11875, rf:446.100, color:'--trace-dmr',   dwell:null, gap:null},
+  {key:'nxdn',  name:'NXDN96',  freq:451.00000, rf:451.000, color:'--trace-nxdn',  dwell:null, gap:null},
+  {key:'p25',   name:'P25-Ph1', freq:450.00000, rf:450.000, color:'--trace-p25',   dwell:null, gap:null},
+  {key:'tetra', name:'TETRA',   freq:420.00000, rf:420.000, color:'--trace-tetra', dwell:null, gap:null},
+];
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+/* ---------------- clock ---------------- */
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB');},1000);
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+}));
+
+/* ============================================================
+   Zoomable canvas graph helper — drag-select zoom on X axis,
+   wheel to scale around cursor, double-click / reset button to
+   restore full span. Mirrors the interaction model GNU Radio's
+   own QT GUI range widgets use.
+   ============================================================ */
+function makeZoomGraph(canvas, box, fullMin, fullMax){
+  const ctx = canvas.getContext('2d');
+  let view = {min:fullMin, max:fullMax};
+  let dragStart = null, dragCur = null;
+
+  function resize(){
+    const r = box.getBoundingClientRect();
+    canvas.width = r.width * devicePixelRatio;
+    canvas.height = r.height * devicePixelRatio;
+    canvas.style.width = r.width+'px';
+    canvas.style.height = r.height+'px';
+  }
+  new ResizeObserver(resize).observe(box);
+  resize();
+
+  canvas.addEventListener('mousedown', e=>{
+    const r = canvas.getBoundingClientRect();
+    dragStart = (e.clientX - r.left) / r.width;
+    dragCur = dragStart;
+  });
+  window.addEventListener('mousemove', e=>{
+    if(dragStart===null) return;
+    const r = canvas.getBoundingClientRect();
+    dragCur = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  });
+  window.addEventListener('mouseup', ()=>{
+    if(dragStart===null) return;
+    if(Math.abs(dragCur-dragStart) > 0.015){
+      const span = view.max-view.min;
+      const a = view.min + Math.min(dragStart,dragCur)*span;
+      const b = view.min + Math.max(dragStart,dragCur)*span;
+      view = {min:a, max:b};
+    }
+    dragStart = null; dragCur = null;
+  });
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    const px = (e.clientX-r.left)/r.width;
+    const span = view.max-view.min;
+    const center = view.min + px*span;
+    const factor = e.deltaY>0 ? 1.15 : 0.87;
+    let newSpan = Math.max((fullMax-fullMin)*0.01, Math.min(fullMax-fullMin, span*factor));
+    let a = center - px*newSpan, b = center + (1-px)*newSpan;
+    if(a < fullMin){b += fullMin-a; a = fullMin;}
+    if(b > fullMax){a -= b-fullMax; b = fullMax;}
+    view = {min:Math.max(fullMin,a), max:Math.min(fullMax,b)};
+  }, {passive:false});
+  canvas.addEventListener('dblclick', ()=>{ view = {min:fullMin, max:fullMax}; });
+
+  return {
+    ctx, get view(){return view;},
+    reset(){ view = {min:fullMin, max:fullMax}; },
+    dragRect(){
+      if(dragStart===null) return null;
+      const r = canvas.getBoundingClientRect();
+      return [Math.min(dragStart,dragCur)*r.width, Math.max(dragStart,dragCur)*r.width];
+    },
+    px2x(px){ const r=canvas.getBoundingClientRect(); return view.min + (px/r.width)*(view.max-view.min); },
+  };
+}
+
+/* ---------------- spectrum + waterfall (shared freq axis) ---------------- */
+const FMIN = 419.0, FMAX = 452.5; // MHz, covers all 4 bands with margin
+const specCv = document.getElementById('cvSpectrum');
+const specBox = document.getElementById('boxSpectrum');
+const spec = makeZoomGraph(specCv, specBox, FMIN, FMAX);
+
+const wfCv = document.getElementById('cvWaterfall');
+const wfBox = document.getElementById('boxWaterfall');
+const wf = makeZoomGraph(wfCv, wfBox, FMIN, FMAX);
+
+document.querySelector('[data-reset="spectrum"]').onclick = ()=>spec.reset();
+document.querySelector('[data-reset="waterfall"]').onclick = ()=>wf.reset();
+
+const NBINS = 900;
+let spectrumBins = new Float32Array(NBINS).fill(-95);
+let waterfallRows = []; // array of Float32Array, newest first
+const WF_ROWS_MAX = 160;
+
+function binFreq(i){ return FMIN + (i/NBINS)*(FMAX-FMIN); }
+
+function drawSpectrum(){
+  const r = specBox.getBoundingClientRect();
+  const ctx = spec.ctx; const {min,max} = spec.view;
+  ctx.save(); ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.clearRect(0,0,r.width,r.height);
+  ctx.fillStyle = css('--panel'); ctx.fillRect(0,0,r.width,r.height);
+
+  // grid
+  ctx.strokeStyle = css('--grid'); ctx.lineWidth = 1; ctx.font = '9px monospace'; ctx.fillStyle = css('--text-mute');
+  for(let db=-100; db<=-10; db+=20){
+    const y = r.height - ((db+110)/100)*r.height;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(r.width,y); ctx.stroke();
+    ctx.fillText(db+' dB', 4, y-2);
+  }
+  for(let f=Math.ceil(min); f<=max; f+=1){
+    const x = ((f-min)/(max-min))*r.width;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,r.height); ctx.stroke();
+    ctx.fillText(f+'M', x+2, r.height-3);
+  }
+
+  // trace, colored by which band's window the bin falls in
+  for(const b of BANDS){
+    ctx.strokeStyle = css(b.color); ctx.lineWidth = 1.4; ctx.beginPath();
+    let started=false;
+    for(let i=0;i<NBINS;i++){
+      const f = binFreq(i);
+      if(Math.abs(f-b.freq) > 0.6) continue;
+      if(f<min || f>max) continue;
+      const x = ((f-min)/(max-min))*r.width;
+      const db = spectrumBins[i];
+      const y = r.height - ((db+110)/100)*r.height;
+      if(!started){ctx.moveTo(x,y); started=true;} else ctx.lineTo(x,y);
+    }
+    if(started) ctx.stroke();
+  }
+
+  // drag-select overlay
+  const dr = spec.dragRect();
+  if(dr){ ctx.fillStyle='rgba(26,95,138,0.20)'; ctx.fillRect(dr[0],0,dr[1]-dr[0],r.height); }
+  ctx.restore();
+  document.getElementById('roSpectrum').textContent = `span ${(max-min).toFixed(3)} MHz`;
+}
+
+function drawWaterfall(){
+  const r = wfBox.getBoundingClientRect();
+  const ctx = wf.ctx; const {min,max} = wf.view;
+  ctx.save(); ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.clearRect(0,0,r.width,r.height);
+  // paint the ground white so un-swept area matches the other two graphs
+  ctx.fillStyle = css('--panel'); ctx.fillRect(0,0,r.width,r.height);
+  const rowH = r.height / WF_ROWS_MAX;
+  for(let ri=0; ri<waterfallRows.length; ri++){
+    const row = waterfallRows[ri];
+    const y = ri*rowH;
+    for(let i=0;i<NBINS;i+=2){
+      const f = binFreq(i);
+      if(f<min || f>max) continue;
+      const x = ((f-min)/(max-min))*r.width;
+      const db = row[i];
+      const t = Math.min(1, Math.max(0, (db+100)/70));
+      // light-theme heat scale: white (quiet) -> steel blue -> deep navy (strong).
+      // Inverted vs a dark theme so low energy reads as empty page, not as ink.
+      const rr = Math.round(255 - t*210), gg = Math.round(255 - t*185), bb = Math.round(255 - t*95);
+      ctx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      ctx.fillRect(x, y, Math.max(1.2, r.width/NBINS*2), rowH+0.6);
+    }
+  }
+  const dr = wf.dragRect();
+  if(dr){ ctx.fillStyle='rgba(26,95,138,0.16)'; ctx.fillRect(dr[0],0,dr[1]-dr[0],r.height); }
+  ctx.restore();
+}
+
+/* ---------------- time domain ---------------- */
+const timeCv = document.getElementById('cvTime');
+const timeBox = document.getElementById('boxTime');
+const timeG = makeZoomGraph(timeCv, timeBox, 0, 1);
+document.querySelector('[data-reset="time"]').onclick = ()=>timeG.reset();
+let timeBuf = new Float32Array(600).fill(0);
+
+function drawTime(){
+  const r = timeBox.getBoundingClientRect();
+  const ctx = timeG.ctx; const {min,max} = timeG.view;
+  ctx.save(); ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.clearRect(0,0,r.width,r.height);
+  ctx.fillStyle = css('--panel'); ctx.fillRect(0,0,r.width,r.height);
+  ctx.strokeStyle = css('--grid');
+  for(let i=1;i<4;i++){ const y=r.height*i/4; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(r.width,y); ctx.stroke(); }
+
+  const n = timeBuf.length;
+  const i0 = Math.floor(min*n), i1 = Math.ceil(max*n);
+  ctx.strokeStyle = css(activeBandKey ? '--trace-'+activeBandKey : '--accent');
+  ctx.lineWidth = 1.2; ctx.beginPath();
+  for(let i=i0;i<i1;i++){
+    const x = ((i/n - min)/(max-min))*r.width;
+    const y = r.height/2 - timeBuf[i]*r.height*0.42;
+    if(i===i0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  const dr = timeG.dragRect();
+  if(dr){ ctx.fillStyle='rgba(26,95,138,0.16)'; ctx.fillRect(dr[0],0,dr[1]-dr[0],r.height); }
+  ctx.restore();
+  document.getElementById('roTime').textContent = 'active: ' + (activeBandKey ? activeBandKey.toUpperCase() : '—');
+}
+
+/* ============================================================
+   LIVE bridge only (ws://127.0.0.1:8787, see bridge_server.py) — real
+   Module 1 + Module 2 process control, real IQ-derived spectrum/waterfall/
+   time, real decoded audio, real TETRA call-log events, real .wav
+   recordings. No simulation path exists in this file: until the bridge
+   connects, every panel shows NOT CONNECTED and nothing else.
+   ============================================================ */
+let schedule = BANDS.map(b=>({key:b.key, dwell:b.dwell, gap:b.rf}));
+let schedRendered = false;
+let activeBandKey = null, cycleCount = 0;
+let liveMode = false;
+let ws = null;
+const bandsLive = {}; // key -> {spectrum:[256], active:bool, rms_db, time:[64], t}
+for(const b of BANDS) bandsLive[b.key] = {spectrum:null, active:false, rms_db:-120, time:null, t:0};
+
+let decoderRunning = false;
+let lastTetraEvent = null, lastTetraEventAt = 0;
+const decoderAudio = {}; // key -> {active, rms_db, t}
+for(const b of BANDS) decoderAudio[b.key] = {active:false, rms_db:-120, t:0};
+
+/* Real decoded-audio playback: incoming int16 PCM chunks (from
+   bridge_server.py's ZMQ taps on allinone.grc's audio_mix_* blocks) are
+   queued and scheduled back-to-back on a WebAudio graph -- genuine decoded
+   audio, not synthesized. One AudioContext + one gain node per band. */
+let audioCtx2 = null;
+const bandPlayback = {}; // key -> {gain, nextTime}
+function ensureAudioCtx(){
+  if(!audioCtx2){ audioCtx2 = new (window.AudioContext||window.webkitAudioContext)(); }
+  for(const b of BANDS){
+    if(!bandPlayback[b.key]){
+      const gain = audioCtx2.createGain(); gain.gain.value = 1.0; gain.connect(audioCtx2.destination);
+      bandPlayback[b.key] = {gain, nextTime: audioCtx2.currentTime};
+    }
+  }
+  if(audioCtx2.state === 'suspended') audioCtx2.resume();
+}
+function handleRealAudio(msg){
+  decoderAudio[msg.band] = {active: msg.active, rms_db: msg.rms_db, t: performance.now()};
+  const el = document.querySelector(`.audio-ch[data-b="${msg.band}"]`);
+  if(el){
+    el.classList.toggle('live', msg.active);
+    el.querySelector('.rec-dot').classList.toggle('on', msg.active);
+    const lvl = Math.min(100, Math.max(0, (msg.rms_db+90)*2.2));
+    el.querySelector('.meter i').style.width = lvl.toFixed(0)+'%';
+  }
+  if(!audioListenEnabled) return;
+  ensureAudioCtx();
+  const bytes = atob(msg.pcm16);
+  const n = bytes.length/2;
+  const buf = audioCtx2.createBuffer(1, n, msg.rate);
+  const ch = buf.getChannelData(0);
+  for(let i=0;i<n;i++){
+    const lo = bytes.charCodeAt(i*2), hi = bytes.charCodeAt(i*2+1);
+    let v = (hi<<8)|lo; if(v>=32768) v -= 65536;
+    ch[i] = v/32768;
+  }
+  const pb = bandPlayback[msg.band];
+  const src = audioCtx2.createBufferSource();
+  src.buffer = buf; src.connect(pb.gain);
+  const startAt = Math.max(audioCtx2.currentTime + 0.02, pb.nextTime);
+  src.start(startAt);
+  pb.nextTime = startAt + buf.duration;
+}
+let audioListenEnabled = false;
+
+function requestRecordings(){
+  if(ws && ws.readyState===1) ws.send(JSON.stringify({cmd:'list_recordings'}));
+}
+function deleteRecording(fn){
+  if(!(ws && ws.readyState===1)) return;
+  ws.send(JSON.stringify({cmd:'delete_recording', file:fn}));
+}
+function renderRecordings(items){
+  const el = document.getElementById('recList');
+  if(!items.length){ el.innerHTML = '<div class="rec-empty">no recordings on disk</div>'; return; }
+  el.innerHTML = '';
+  for(const it of items){
+    const ts = new Date(it.mtime*1000);
+    const kb = (it.bytes/1024).toFixed(0);
+    const dur = it.duration!=null ? it.duration+'s' : '?';
+    const div = document.createElement('div');
+    div.className = 'rec-item';
+    div.innerHTML =
+      `<div class="meta"><div class="fn">${it.file}</div>`+
+      `<div class="ts">${ts.toLocaleTimeString('en-GB')} · ${(it.band||'?').toUpperCase()} · ${dur} · ${kb} KB</div></div>`+
+      `<button data-play title="play">&#9654;</button>`+
+      `<button data-dl title="save to disk">&#8595;</button>`+
+      `<button class="danger" data-del title="delete">&#10005;</button>`;
+    div.querySelector('[data-play]').onclick = ()=>{
+      const a = new Audio('/recordings/'+encodeURIComponent(it.file));
+      a.play().catch(e=>logLine('sys','[GUI] playback failed: '+e.message));
+    };
+    div.querySelector('[data-dl]').onclick = ()=>{
+      const a = document.createElement('a');
+      a.href = '/recordings/'+encodeURIComponent(it.file);
+      a.download = it.file; document.body.appendChild(a); a.click(); a.remove();
+    };
+    div.querySelector('[data-del]').onclick = ()=>{
+      if(confirm('Delete '+it.file+' ?')) deleteRecording(it.file);
+    };
+    el.appendChild(div);
+  }
+}
+
+
+function setLiveBadge(on){
+  document.getElementById('dotSystem').className = 'dot ' + (on?'ok':'warn');
+  document.getElementById('lblSystem').textContent = on ? 'LIVE — real IQ + real decode/audio' : 'NOT CONNECTED';
+}
+
+function connectBridge(){
+  try{ ws = new WebSocket('ws://127.0.0.1:8787'); } catch(e){ scheduleReconnect(); return; }
+  ws.onopen = ()=>{
+    liveMode = true; setLiveBadge(true);
+    logLine('sys', '[BRIDGE] connected — spectrum/waterfall/time are real IQ of CH2 (USRP-2945 TwinRX A/RX2) via the CH2 router.');
+  };
+  ws.onclose = ()=>{
+    liveMode = false; setLiveBadge(false);
+    document.getElementById('dotHw').className = 'dot bad';
+    document.getElementById('lblHw').textContent = 'USRP-2945 · CH2 · bridge disconnected';
+    scheduleReconnect();
+  };
+  ws.onerror = ()=>{};
+  ws.onmessage = ev=>{
+    let msg; try{ msg = JSON.parse(ev.data); } catch(e){ return; }
+    if(msg.type === 'iq'){
+      const bl = bandsLive[msg.band];
+      if(bl){ bl.spectrum = msg.spectrum; bl.active = msg.active; bl.rms_db = msg.rms_db; bl.time = msg.time; bl.t = performance.now();
+        bl.chan_db = msg.chan_db; bl.chan_best = msg.chan_best; bl.chan_best_db = msg.chan_best_db;
+        bl.chan_occupied = msg.chan_occupied || []; bl.chan_bw_hz = msg.chan_bw_hz; }
+      activeBandKey = Object.keys(bandsLive).find(k=>bandsLive[k].active && performance.now()-bandsLive[k].t < 400) || activeBandKey;
+    } else if(msg.type === 'log'){
+      logLine(msg.band, msg.text);
+    } else if(msg.type === 'decoder_status'){
+      decoderRunning = msg.running;
+      document.getElementById('decStatus').textContent = msg.running ? 'RUNNING (real)' : 'stopped';
+      document.getElementById('decStatus').className = 'v ' + (msg.running?'ok':'');
+      document.getElementById('hwNote').textContent = msg.running
+        ? 'Decoder running — real decoded audio (DMR/NXDN/P25/TETRA) and real TETRA call-log events are now live. DMR/NXDN/P25 have no per-call metadata: gr-dsd-ext\'s dsd_block only outputs audio, no message port — that is a real limitation of that block, not something faked here.'
+        : 'Decoder audio not attached: allinone.py is started by the monitoring watchdog; the console attaches automatically when it is up.';
+    } else if(msg.type === 'audio'){
+      handleRealAudio(msg);
+    } else if(msg.type === 'recordings_list'){
+      renderRecordings(msg.items || []);
+    } else if(msg.type === 'recording'){
+      requestRecordings();
+    } else if(msg.type === 'tetra_event'){
+      lastTetraEvent = msg.data; lastTetraEventAt = performance.now();
+    } else if(msg.type === 'status'){
+      cycleCount = msg.cycle || 0;
+      document.getElementById('dotHw').className = 'dot ' + (msg.running ? 'ok':'bad');
+      document.getElementById('lblHw').textContent = 'USRP-2945 · CH2 · ' + (msg.running ? 'RUNNING (real)' : 'feed disconnected');
+      if(msg.device) document.getElementById('hwDevice').textContent = msg.device;
+      if(msg.link){ document.getElementById('hwUsb').textContent = msg.link; document.getElementById('hwUsb').className = 'v ok'; }
+      if(msg.gain_min != null && msg.gain_max != null){ hwGain.min = msg.gain_min; hwGain.max = msg.gain_max; }
+      if(msg.rx_gain_actual != null){
+        document.getElementById('hwGainVal').textContent = msg.rx_gain_actual + ' dB (real)';
+        if(document.activeElement !== hwGain) hwGain.value = msg.rx_gain_actual;
+      }
+      if(msg.ch2_mode != null){
+        document.getElementById('hwMode').textContent = msg.ch2_mode === 'auto' ? 'Mode 2 · auto lock' : 'Mode 1 · scan all bands';
+      }
+      if(msg.ch2_lock != null){
+        const lk = String(msg.ch2_lock).split('|');
+        const el = document.getElementById('hwLockBand');
+        el.textContent = lk[0]==='lock' ? ('LOCKED · ' + lk[1] + (lk[2]?(' · '+lk[2]+' MHz'):'')) : lk[0]==='search' ? 'searching' : 'scanning (Mode 1)';
+        el.className = 'v ' + (lk[0]==='lock' ? 'ok' : '');
+      }
+      if(msg.bands){
+        for(const b of BANDS){ const pb = msg.bands[b.key]; if(!pb) continue;
+          b.freq = pb.centre/1e6; b.rf = pb.rf/1e6; b.dwell = pb.dwell_ms; }
+        if(!schedRendered){ schedule = BANDS.map(b=>({key:b.key, dwell:b.dwell, gap:b.rf})); renderSchedRows(); schedRendered = true; }
+      }
+      if(msg.lo_lock != null){
+        document.getElementById('hwLock').textContent = msg.lo_lock;
+        document.getElementById('hwLock').className = 'v ' + (msg.lo_lock==='OK'?'ok':'bad');
+      }
+      if(msg.clients){
+        const total = Object.values(msg.clients).reduce((a,b)=>a+b,0);
+        document.getElementById('hwClients').textContent = total + ' / 4 connected';
+      }
+      updateHwPanel();
+    }
+  };
+}
+function scheduleReconnect(){ setTimeout(connectBridge, 1500); }
+
+function bandFreqIndexToGlobalFreq(band, i, n){
+  const halfSpan = 0.1; // MHz, since IQ span = samp_rate = 200 kHz
+  return band.freq - halfSpan + (i/n)*halfSpan*2;
+}
+function liveFeedFrame(){
+  // scatter each band's real FFT into the shared global spectrum array
+  for(const b of BANDS){
+    const bl = bandsLive[b.key];
+    if(!bl.spectrum) continue;
+    const n = bl.spectrum.length;
+    for(let i=0;i<n;i++){
+      const f = bandFreqIndexToGlobalFreq(b, i, n);
+      const idx = Math.round(((f-FMIN)/(FMAX-FMIN))*NBINS);
+      if(idx>=0 && idx<NBINS) spectrumBins[idx] = bl.spectrum[i];
+    }
+  }
+  waterfallRows.unshift(spectrumBins.slice());
+  if(waterfallRows.length > WF_ROWS_MAX) waterfallRows.pop();
+
+  const active = activeBandKey && bandsLive[activeBandKey] && bandsLive[activeBandKey].time
+    && performance.now()-bandsLive[activeBandKey].t < 400;
+  if(active){
+    const t = bandsLive[activeBandKey].time;
+    for(let i=0;i<timeBuf.length-t.length;i++) timeBuf[i]=timeBuf[i+t.length];
+    for(let k=0;k<t.length;k++) timeBuf[timeBuf.length-t.length+k] = t[k];
+  }
+
+  for(const b of BANDS){
+    const bl = bandsLive[b.key];
+    const el = document.querySelector(`.audio-ch[data-b="${b.key}"]`);
+    // real energy shown here as a proxy for "signal present" — NOT decoded
+    // audio (that needs Module 2's dsd output, not wired by this bridge)
+    el.classList.toggle('live', false);
+    el.querySelector('.rec-dot').classList.remove('on');
+    const lvl = bl.spectrum ? Math.min(100, Math.max(0, (bl.rms_db+90)*2.2)) : 0;
+    el.querySelector('.meter i').style.width = lvl.toFixed(0)+'%';
+  }
+
+  // Signals tab: DECODING = real decoded audio flowing (squelch open,
+  // confirmed by Module 2); ACTIVE = raw RF energy on that band's port but
+  // no confirmed decode yet (Module 2 not running, or squelched); idle = neither.
+  const t = document.getElementById('signalsTable');
+  t.innerHTML = '<tr><th>Band</th><th>Freq MHz</th><th>State</th><th>RMS dBFS</th></tr>';
+  let decodingBand = null;
+  for(const b of BANDS){
+    const bl = bandsLive[b.key];
+    const da = decoderAudio[b.key];
+    const isRfActive = bl.active && performance.now()-bl.t < 400;
+    const isDecoding = decoderRunning && da.active && performance.now()-da.t < 700;
+    if(isDecoding) decodingBand = b.key;
+    const state = isDecoding ? 'DECODING' : isRfActive ? 'ACTIVE' : 'idle';
+    const cls = isDecoding ? 'state-decoding' : isRfActive ? 'state-active' : 'state-idle';
+    const rms = isDecoding ? da.rms_db : (bl.spectrum ? bl.rms_db : null);
+    t.innerHTML += `<tr class="row-${b.key}"><td class="chip">${b.name}</td><td>${b.freq.toFixed(5)}</td>`+
+      `<td class="${cls}">${state}</td><td>${rms!=null?rms.toFixed(1):'—'}</td></tr>`;
+  }
+
+  // per-channel activity for whichever band is currently dwelling
+  const ct = document.getElementById('chanTable');
+  const actKey = BANDS.map(b=>b.key).find(k=>bandsLive[k].active && performance.now()-bandsLive[k].t < 500);
+  if(actKey && bandsLive[actKey].chan_db){
+    const bl = bandsLive[actKey];
+    const bw = (bl.chan_bw_hz||12500)/1000;
+    const med = [...bl.chan_db].sort((a,b)=>a-b)[Math.floor(bl.chan_db.length/2)];
+    const n = bl.chan_db.length;
+    let rows = `<tr><th>Ch</th><th>Offset kHz</th><th>Level dB</th></tr>`;
+    const order = bl.chan_db.map((v,i)=>i).sort((a,b)=>bl.chan_db[b]-bl.chan_db[a]).slice(0,6);
+    for(const i of order){
+      const off = (i <= n/2 ? i : i-n) * bw;
+      const rel = bl.chan_db[i]-med;
+      const occ = (bl.chan_occupied||[]).includes(i);
+      const col = occ ? 'var(--ok)' : 'var(--text-mute)';
+      rows += `<tr><td style="color:${col}">${i}${occ?' ●':''}</td>`+
+              `<td>${off>=0?'+':''}${off.toFixed(2)}</td>`+
+              `<td style="color:${col}">${rel>0?'+':''}${rel.toFixed(1)}</td></tr>`;
+    }
+    ct.innerHTML = rows;
+  } else {
+    ct.innerHTML = '<tr><th>Ch</th><th>Offset kHz</th><th>Level dB</th></tr>'+
+      '<tr><td colspan="3" style="color:var(--text-mute)">no band dwelling right now</td></tr>';
+  }
+
+  const dt = document.getElementById('decodeTable');
+  if(!decoderRunning){
+    dt.innerHTML = '<tr><th>Key</th><th>Value</th></tr><tr><td colspan="2" style="color:var(--text-mute)">'+
+      'decoder not running — Hardware tab → Start decoder</td></tr>';
+  } else if(lastTetraEvent && performance.now()-lastTetraEventAt < 8000){
+    dt.innerHTML = '<tr><th>Key</th><th>Value</th></tr>' +
+      Object.entries(lastTetraEvent).map(([k,v])=>`<tr><td>${k}</td><td>${String(v)}</td></tr>`).join('');
+  } else if(decodingBand || actKey){
+    const k = decodingBand || actKey;
+    const b = BANDS.find(x=>x.key===k);
+    const bl = bandsLive[k];
+    const da = decoderAudio[k];
+    const n = (bl.chan_db||[]).length || 1;
+    const bw = (bl.chan_bw_hz||12500)/1000;
+    const ch = (bl.chan_best!=null && bl.chan_best>=0) ? bl.chan_best : null;
+    const off = ch!=null ? ((ch <= n/2 ? ch : ch-n) * bw) : null;
+    const chFreq = (ch!=null && b) ? (b.freq + off/1000) : null;
+    const isDec = decodingBand===k;
+    dt.innerHTML = '<tr><th>Key</th><th>Value</th></tr>'+
+      `<tr><td>Protocol</td><td class="chip" style="color:var(--trace-${k})">${b?b.name:k.toUpperCase()}</td></tr>`+
+      `<tr><td>Band centre</td><td>${b?b.freq.toFixed(5):'—'} MHz</td></tr>`+
+      `<tr><td>Channel</td><td>${ch!=null?ch:'—'}${ch!=null?` of ${n}`:''}</td></tr>`+
+      `<tr><td>Ch offset</td><td>${off!=null?(off>=0?'+':'')+off.toFixed(2)+' kHz':'—'}</td></tr>`+
+      `<tr><td>Ch frequency</td><td>${chFreq!=null?chFreq.toFixed(5)+' MHz':'—'}</td></tr>`+
+      `<tr><td>Ch SNR</td><td>${bl.chan_best_db!=null?'+'+bl.chan_best_db+' dB':'—'}</td></tr>`+
+      `<tr><td>Occupied ch</td><td>${(bl.chan_occupied&&bl.chan_occupied.length)?bl.chan_occupied.join(', '):'—'}</td></tr>`+
+      `<tr><td>RF level</td><td>${bl.rms_db!=null?bl.rms_db.toFixed(1)+' dBFS':'—'}</td></tr>`+
+      `<tr><td>Audio</td><td style="color:${isDec?'var(--ok)':'var(--text-mute)'}">${isDec?'DECODING ('+da.rms_db.toFixed(1)+' dBFS)':'no decoded audio'}</td></tr>`+
+      `<tr><td>Talkgroup/SSI</td><td style="color:var(--text-mute)">${k==='tetra'?'via TETRA call_log':'unavailable — dsd_block exposes no metadata port'}</td></tr>`;
+  } else {
+    dt.innerHTML = '<tr><th>Key</th><th>Value</th></tr><tr><td colspan="2" style="color:var(--text-mute)">no active decode</td></tr>';
+  }
+
+  drawSpectrum(); drawWaterfall(); drawTime();
+}
+
+function logLine(band, text){
+  const el = document.getElementById('console');
+  const div = document.createElement('div');
+  div.className = 'ln ' + (band||'sys');
+  const t = new Date().toLocaleTimeString('en-GB');
+  div.innerHTML = `<span class="t">[${t}]</span> ${text}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  while(el.children.length > 300) el.removeChild(el.firstChild);
+}
+
+/* No simulation anywhere in this file. Until the bridge is connected, every
+   panel shows a plain "NOT CONNECTED" state -- never synthetic data. */
+function showNotConnected(){
+  const t = document.getElementById('signalsTable');
+  t.innerHTML = '<tr><th>Band</th><th>Freq MHz</th><th>State</th><th>RMS dBFS</th></tr>';
+  for(const b of BANDS){
+    t.innerHTML += `<tr class="row-${b.key}"><td class="chip">${b.name}</td><td>${b.freq.toFixed(5)}</td>`+
+      `<td class="state-idle">NOT CONNECTED</td><td>—</td></tr>`;
+  }
+  document.getElementById('decodeTable').innerHTML =
+    '<tr><th>Key</th><th>Value</th></tr><tr><td colspan="2" style="color:var(--text-mute)">bridge_server.py not connected — no data source</td></tr>';
+  document.querySelectorAll('.audio-ch').forEach(el=>{
+    el.classList.remove('live'); el.querySelector('.rec-dot').classList.remove('on');
+    el.querySelector('.meter i').style.width = '0%';
+  });
+}
+
+function updateHwPanel(){
+  // real values only arrive via 'status' broadcasts from the bridge; this
+  // just keeps the cycle counter in sync between those events
+  document.getElementById('hwCycle').textContent = cycleCount;
+}
+
+/* ---------------- real IQ/audio/log frame tick ---------------- */
+function feedFrame(){
+  if(liveMode){ liveFeedFrame(); }
+  else { showNotConnected(); }
+}
+
+/* ---------------- schedule tab wiring ---------------- */
+function renderSchedRows(){
+  const el = document.getElementById('schedRows');
+  el.innerHTML = '';
+  for(const s of schedule){
+    const b = BANDS.find(x=>x.key===s.key);
+    const row = document.createElement('div');
+    row.className = 'sched-row';
+    row.innerHTML = `<div class="name">${b.name}</div>`+
+      `<div class="sched-field"><input type="number" value="${s.dwell!=null?s.dwell:''}" data-k="dwell" readonly title="from scan_plan.py"></div>`+
+      `<div class="sched-field"><input type="text" value="${s.gap!=null?(s.gap.toFixed(4)+' / '+b.freq.toFixed(5)):''}" data-k="gap" readonly></div>`;
+    el.appendChild(row);
+  }
+}
+document.getElementById('btnApplySched').onclick = ()=>{
+  if(!(liveMode && ws && ws.readyState===1)){
+    logLine('sys', '[GUI] bridge not connected — cannot apply schedule to real hardware'); return;
+  }
+  const dwell = {}; for(const s of schedule) dwell[s.key] = s.dwell;
+  ws.send(JSON.stringify({cmd:'apply_schedule', dwell}));
+  logLine('sys', '[BRIDGE] asked the bridge for the CH2 schedule (it is set by the MON scan plan)');
+};
+document.getElementById('btnResetSched').onclick = ()=>{
+  schedule = BANDS.map(b=>({key:b.key, dwell:b.dwell, gap:b.rf}));
+  renderSchedRows();
+};
+
+/* ---------------- hardware tab wiring ---------------- */
+const hwGain = document.getElementById('hwGain');
+hwGain.addEventListener('input', ()=>{
+  document.getElementById('hwGainVal').textContent = hwGain.value + ' dB (unapplied)';
+});
+document.getElementById('btnHwStart').onclick = ()=>{
+  if(!(ws && ws.readyState===1)){ logLine('sys', '[GUI] bridge not connected — cannot start real hardware'); return; }
+  ws.send(JSON.stringify({cmd:'start'}));
+  logLine('sys', '[BRIDGE] requested CH2 feed connect');
+};
+document.getElementById('btnHwStop').onclick = ()=>{
+  if(!(ws && ws.readyState===1)){ logLine('sys', '[GUI] bridge not connected'); return; }
+  ws.send(JSON.stringify({cmd:'stop'}));
+  logLine('sys', '[BRIDGE] requested CH2 feed disconnect (the radio keeps running)');
+};
+
+document.getElementById('btnRecRefresh').onclick = ()=>requestRecordings();
+document.getElementById('btnRecDeleteAll').onclick = ()=>{
+  if(!(ws && ws.readyState===1)) return;
+  if(confirm('Delete ALL recordings on disk?')) ws.send(JSON.stringify({cmd:'delete_all_recordings'}));
+};
+document.getElementById('btnApplyGain').onclick = ()=>{
+  if(!(ws && ws.readyState===1)){ logLine('sys', '[GUI] bridge not connected'); return; }
+  ws.send(JSON.stringify({cmd:'apply_gain', gain_db: parseFloat(hwGain.value)}));
+  logLine('sys', `[BRIDGE] requested CH2 RX gain=${hwGain.value} dB (live)`);
+};
+document.getElementById('btnDecStart').onclick = ()=>{
+  audioListenEnabled = true; ensureAudioCtx();
+  if(ws && ws.readyState===1){ ws.send(JSON.stringify({cmd:'start_decoder'})); logLine('sys','[BRIDGE] audio playback enabled; attach to the running decoder'); }
+  else logLine('sys','bridge not connected — cannot start decoder');
+};
+document.getElementById('btnDecStop').onclick = ()=>{
+  if(ws && ws.readyState===1){ ws.send(JSON.stringify({cmd:'stop_decoder'})); logLine('sys','[BRIDGE] detach console from decoder audio'); }
+};
+
+/* ---------------- boot ---------------- */
+renderSchedRows();
+showNotConnected();
+updateHwPanel();
+connectBridge();
+logLine('sys', 'Console loaded. Waiting for bridge_server.py at ws://127.0.0.1:8787 — no simulated data, real feed only.');
+setInterval(feedFrame, 90);
+requestAnimationFrame(function loop(){ drawSpectrum(); drawWaterfall(); drawTime(); requestAnimationFrame(loop); });
+</script>
+</body>
+</html>
