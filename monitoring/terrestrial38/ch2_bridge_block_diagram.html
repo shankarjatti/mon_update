@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CH2 Bridge Diagram</title>
+<style>
+  :root{--ink:#1a1f2b;--muted:#6b7280;--line:#c9d0d9;--blue:#1769e0;--blue-soft:#eaf2fd;
+    --red:#e02424;--red-soft:#fdecec;--green:#1a9e5a;--panel:#fff;--bg:#f4f6f9;--amber:#b8860b}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:1240px;margin:0 auto;padding:16px}
+  h1{font-size:18px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:10px}
+  svg{width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .leg{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted)}
+  .leg span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:22px;height:0;border-top-width:3px;border-top-style:solid;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CH2 → Repo Console — current wiring (GR 3.8 / UHD 3.15)</h1>
+  <div class="sub">mon_scan owns the X310 and publishes CH2 IQ once; the repo bridge runs in external‑feed mode (no Module 1 / Module 2). Repo files unchanged.</div>
+
+  <svg viewBox="0 0 1200 720" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+    <defs>
+      <marker id="ab" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#1769e0"/></marker>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#e02424"/></marker>
+      <marker id="ag" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#6b7280"/></marker>
+    </defs>
+
+    <!-- ===== USRP ===== -->
+    <rect x="24" y="250" width="150" height="150" rx="10" fill="#fff" stroke="#c9d0d9"/>
+    <text x="99" y="274" text-anchor="middle" font-weight="700" font-size="13">USRP X310</text>
+    <text x="99" y="291" text-anchor="middle" font-size="10.5" fill="#6b7280">31082D8 · 2×TwinRX</text>
+    <rect x="40" y="302" width="118" height="20" rx="4" fill="#f4f6f9" stroke="#e1e6ec"/>
+    <text x="99" y="316" text-anchor="middle" font-size="10">CH1 · A/RX1</text>
+    <rect x="40" y="326" width="118" height="20" rx="4" fill="#eaf2fd" stroke="#bcd6f7"/>
+    <text x="99" y="340" text-anchor="middle" font-size="10" fill="#1769e0" font-weight="700">CH2 · A/RX2 — terrestrial</text>
+    <rect x="40" y="350" width="118" height="20" rx="4" fill="#f4f6f9" stroke="#e1e6ec"/>
+    <text x="99" y="364" text-anchor="middle" font-size="10">CH3 · B/RX1</text>
+    <rect x="40" y="374" width="118" height="20" rx="4" fill="#f4f6f9" stroke="#e1e6ec"/>
+    <text x="99" y="388" text-anchor="middle" font-size="10">CH4 · B/RX2</text>
+
+    <!-- ===== mon_scan ===== -->
+    <rect x="236" y="282" width="168" height="86" rx="10" fill="#fff" stroke="#1769e0" stroke-width="1.5"/>
+    <text x="320" y="306" text-anchor="middle" font-weight="700" font-size="13">mon_scan</text>
+    <text x="320" y="323" text-anchor="middle" font-size="10.5" fill="#6b7280">owns radio · scans CH2</text>
+    <text x="320" y="338" text-anchor="middle" font-size="10.5" fill="#6b7280">7 bands · dwell+10ms switch</text>
+    <text x="320" y="356" text-anchor="middle" font-size="10.5" fill="#1769e0" font-weight="700">ZMQ PUB :5202 (cplx64 2MS/s)</text>
+
+    <!-- USRP -> mon_scan (CH2 IQ) -->
+    <line x1="174" y1="336" x2="236" y2="325" stroke="#1769e0" stroke-width="3" marker-end="url(#ab)"/>
+
+    <!-- ===== fan-out bus node ===== -->
+    <circle cx="470" cy="325" r="5" fill="#1769e0"/>
+    <line x1="404" y1="325" x2="465" y2="325" stroke="#1769e0" stroke-width="3" marker-end="url(#ab)"/>
+    <text x="470" y="312" text-anchor="middle" font-size="10" fill="#6b7280">5202</text>
+
+    <!-- ===== branch A: ch2_iq_tcp (IQ path) ===== -->
+    <rect x="536" y="150" width="210" height="104" rx="10" fill="#fff" stroke="#1769e0" stroke-width="1.5"/>
+    <text x="641" y="174" text-anchor="middle" font-weight="700" font-size="13">ch2_iq_tcp.py</text>
+    <text x="641" y="191" text-anchor="middle" font-size="10.5" fill="#6b7280">decimate 2MS/s → 200 kS/s (÷10)</text>
+    <text x="641" y="206" text-anchor="middle" font-size="10.5" fill="#6b7280">idle bands → zero‑fill</text>
+    <text x="641" y="224" text-anchor="middle" font-size="10.5" fill="#1769e0" font-weight="700">TCP server 7001‑7008</text>
+    <text x="641" y="240" text-anchor="middle" font-size="10" fill="#6b7280">DMR 7001·NXDN 7002·P25 7003·TETRA 7004·DSTAR 7006</text>
+
+    <!-- bus -> ch2_iq_tcp -->
+    <path d="M470,320 L470,202 L536,202" fill="none" stroke="#1769e0" stroke-width="3" marker-end="url(#ab)"/>
+
+    <!-- ===== branch B: decoders (audio path) ===== -->
+    <rect x="536" y="398" width="210" height="120" rx="10" fill="#fff" stroke="#e02424" stroke-width="1.5"/>
+    <text x="641" y="422" text-anchor="middle" font-weight="700" font-size="13">decoders (GR 3.8 C++ OOT)</text>
+    <text x="641" y="439" text-anchor="middle" font-size="10.5" fill="#6b7280">decode_dsd · decode_tetra</text>
+    <text x="641" y="454" text-anchor="middle" font-size="10.5" fill="#6b7280">band‑filtered · 8k decode → 48k</text>
+    <text x="641" y="472" text-anchor="middle" font-size="10.5" fill="#e02424" font-weight="700">ZMQ PUB 9101‑9107 (48k f32)</text>
+    <text x="641" y="488" text-anchor="middle" font-size="10" fill="#6b7280">DMR 9101·NXDN 9102·P25 9103</text>
+    <text x="641" y="502" text-anchor="middle" font-size="10" fill="#6b7280">TETRA 9104·DSTAR 9107</text>
+
+    <!-- bus -> decoders (same 5202 feed) -->
+    <path d="M470,330 L470,452 L536,452" fill="none" stroke="#1769e0" stroke-width="3" marker-end="url(#ab)"/>
+    <text x="500" y="445" font-size="9.5" fill="#6b7280">5202</text>
+
+    <!-- ===== bridge_server_ext ===== -->
+    <rect x="812" y="268" width="192" height="130" rx="10" fill="#fff" stroke="#1a1f2b" stroke-width="1.5"/>
+    <text x="908" y="292" text-anchor="middle" font-weight="700" font-size="13">bridge_server_ext.py</text>
+    <text x="908" y="309" text-anchor="middle" font-size="10.5" fill="#6b7280">repo bridge, UNCHANGED</text>
+    <text x="908" y="324" text-anchor="middle" font-size="10.5" fill="#1a9e5a" font-weight="700">EXTERNAL‑feed mode</text>
+    <text x="908" y="339" text-anchor="middle" font-size="10" fill="#6b7280">no Module 1 (RF) / Module 2</text>
+    <text x="908" y="356" text-anchor="middle" font-size="10" fill="#1769e0">reads IQ 7001‑8 (TCP client)</text>
+    <text x="908" y="370" text-anchor="middle" font-size="10" fill="#e02424">reads audio 9101‑7 (ZMQ sub)</text>
+    <text x="908" y="387" text-anchor="middle" font-size="10.5" fill="#1a1f2b" font-weight="700">WebSocket :8787</text>
+
+    <!-- ch2_iq_tcp -> bridge (IQ) -->
+    <path d="M746,202 L779,202 L779,318 L812,318" fill="none" stroke="#1769e0" stroke-width="3" marker-end="url(#ab)"/>
+    <text x="760" y="195" font-size="9.5" fill="#1769e0">IQ·TCP</text>
+    <!-- decoders -> bridge (audio) -->
+    <path d="M746,458 L779,458 L779,360 L812,360" fill="none" stroke="#e02424" stroke-width="3" marker-end="url(#ar)"/>
+    <text x="752" y="474" font-size="9.5" fill="#e02424">audio·ZMQ</text>
+
+    <!-- ===== console ===== -->
+    <rect x="1040" y="276" width="140" height="114" rx="10" fill="#fff" stroke="#1769e0" stroke-width="1.5"/>
+    <text x="1110" y="300" text-anchor="middle" font-weight="700" font-size="12.5">securecom_gui</text>
+    <text x="1110" y="316" text-anchor="middle" font-size="10.5" fill="#6b7280">repo console</text>
+    <text x="1110" y="333" text-anchor="middle" font-size="10" fill="#1769e0">spectrum·waterfall·time</text>
+    <text x="1110" y="347" text-anchor="middle" font-size="10" fill="#e02424">audio player·DF log</text>
+    <text x="1110" y="364" text-anchor="middle" font-size="10" fill="#6b7280">in CH2 panel of</text>
+    <text x="1110" y="378" text-anchor="middle" font-size="10" fill="#6b7280">securecom_ui.html</text>
+
+    <!-- bridge <-> console (ws) -->
+    <path d="M1004,333 L1040,333" fill="none" stroke="#6b7280" stroke-width="2.5" marker-end="url(#ag)"/>
+    <path d="M1040,345 L1004,345" fill="none" stroke="#6b7280" stroke-width="2" marker-end="url(#ag)" stroke-dasharray="4 3"/>
+    <text x="1022" y="326" text-anchor="middle" font-size="9" fill="#6b7280">ws</text>
+
+    <!-- console Start/Start-decoder control note -->
+    <text x="1110" y="408" text-anchor="middle" font-size="9.5" fill="#6b7280" font-style="italic">Start · Start decoder</text>
+
+    <!-- ===== off-path note: other channels ===== -->
+    <rect x="236" y="430" width="168" height="54" rx="8" fill="#f4f6f9" stroke="#e1e6ec" stroke-dasharray="4 3"/>
+    <text x="320" y="451" text-anchor="middle" font-size="10.5" fill="#6b7280" font-weight="700">CH1 / CH3 / CH4</text>
+    <text x="320" y="466" text-anchor="middle" font-size="10" fill="#6b7280">drone · radar · IMSI</text>
+    <text x="320" y="478" text-anchor="middle" font-size="10" fill="#6b7280">drawn in unified UI</text>
+    <line x1="174" y1="360" x2="236" y2="455" stroke="#c9d0d9" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ag)"/>
+
+    <!-- title band -->
+    <text x="600" y="560" text-anchor="middle" font-size="11" fill="#6b7280">One ZMQ 5202 feed, two consumers → one repo bridge → one console. Only the active band carries real IQ; the rest are zero‑fill.</text>
+    <text x="600" y="580" text-anchor="middle" font-size="11" fill="#6b7280">Verified offline: DMR +30 kHz tone → spectrum bin 166/256 (centre+38 = +30 kHz); all 5 CH2 bands active, 3 unused ports zero‑fill.</text>
+  </svg>
+
+  <div class="leg">
+    <span><i class="sw" style="border-top-color:#1769e0"></i> IQ / spectrum path</span>
+    <span><i class="sw" style="border-top-color:#e02424"></i> decoded‑audio path</span>
+    <span><i class="sw" style="border-top-color:#6b7280"></i> WebSocket / control</span>
+    <span><i class="sw" style="border-top-color:#c9d0d9;border-top-style:dashed"></i> off‑path (other channels)</span>
+  </div>
+</div>
+</body>
+</html>

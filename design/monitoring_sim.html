@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitoring Block Diagram — live</title>
+<style>
+  :root{--bg:#ffffff;--ink:#1a1f2b;--muted:#6b7280;--line:#c9d0d9;
+    --blue:#1769e0;--blue-soft:#eaf2fd;--red:#e02424;--red-soft:#fdecec;--green:#1a9e5a}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  body{padding:14px;max-width:1120px;margin:0 auto}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--muted);font-size:12px;margin:2px 0 10px}
+  .bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:10px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;padding:5px 11px;cursor:pointer}
+  button:hover{background:#f1f4f8}
+  button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  button.tier.on{background:var(--red);border-color:var(--red);color:#fff}
+  #emergBtn.on{filter:brightness(1.08);box-shadow:0 0 0 2px #f3b8b8}
+  .pill{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid var(--line)}
+  .pill.mon{background:var(--blue-soft);color:var(--blue);border-color:#bcd6f7}
+  .pill.df{background:var(--red-soft);color:var(--red);border-color:#f3b8b8}
+  svg{width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+  .blk{fill:#fff;stroke:var(--line);stroke-width:1}
+  .blk.lit{stroke:var(--blue);stroke-width:2}
+  .blk.litR{stroke:var(--red);stroke-width:2}
+  .blk.dim{opacity:.3}
+  .t1{font:600 12px sans-serif;fill:var(--ink)}
+  .t2{font:10px sans-serif;fill:var(--muted)}
+  .wire{stroke:var(--line);stroke-width:1.5;fill:none}
+  .wire.dim{opacity:.22}
+  #log{height:120px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;
+    padding:6px 10px;margin-top:10px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace}
+  #log div{white-space:nowrap}
+  .lt{color:var(--muted)}.lb{color:var(--blue);font-weight:600}.lr{color:var(--red);font-weight:600}.lg{color:var(--green);font-weight:600}
+</style>
+</head>
+<body>
+<h1>Monitoring &amp; DF — animated block diagram</h1>
+<div class="sub">USRP block shows its 4 channels as live frame time-graphs (MON: each own LO &amp; band). Blue = monitoring data on 4 Pub-Sub links; red = detection / DF request / bearing. In DF all 4 channels move to ONE shared LO.</div>
+
+<div class="bar">
+  <div class="row">
+    <span id="modePill" class="pill mon">MODE: MON</span>
+    <span class="lt">clock</span> <b id="clock" style="font-variant-numeric:tabular-nums">0.00 s</b>
+  </div>
+  <div class="row">
+    <span class="lt">speed</span>
+    <button class="spd on" data-s="1">1×</button><button class="spd" data-s="4">4×</button><button class="spd" data-s="10">10×</button>
+    <button id="approveBtn" style="display:none;background:var(--red);border-color:var(--red);color:#fff">Approve DF</button>
+    <button id="backMonBtn" style="display:none;background:var(--blue);border-color:var(--blue);color:#fff">◻ Back to MON</button>
+    <button id="pauseBtn">Pause</button>
+  </div>
+</div>
+
+<div class="bar" style="display:block">
+  <div class="row">
+    <b style="font-size:13px">DF scheduling</b>
+    <button id="schedNormal" class="on">Priority — drone ×5 · others ×2</button>
+    <button id="emergBtn" style="background:var(--red);border-color:var(--red);color:#fff">● EMERGENCY</button>
+  </div>
+  <div id="tierRow" class="row" style="display:none;margin-top:6px">
+    <span class="lt">module:</span>
+    <button class="tier" data-t="0">Drone / Replay</button>
+    <button class="tier" data-t="1">Terrestrial</button>
+    <button class="tier" data-t="2">Radar</button>
+    <button class="tier" data-t="3">Cellular/IMSI</button>
+    <button class="tier" data-t="gnss">GNSS</button>
+    <button id="tierClear">✕ clear all</button>
+  </div>
+  <div id="bandRow" class="row" style="display:none;margin-top:6px"></div>
+  <div id="emergLabel" class="lt" style="font-weight:600;margin-top:6px"></div>
+</div>
+
+<svg id="svg" viewBox="0 0 1000 600" role="img" aria-label="Animated monitoring and direction-finding block diagram"></svg>
+<div id="log"></div>
+
+<script>
+const S=document.getElementById('svg');
+const NS='http://www.w3.org/2000/svg';
+function el(t,a){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;}
+function box(id,x,y,w,h,t1,t2){
+  const g=el('g',{id:id});
+  g.appendChild(el('rect',{x,y,width:w,height:h,rx:7,class:'blk','data-blk':id}));
+  const a=el('text',{x:x+w/2,y:y+(t2?h/2-2:h/2+4),'text-anchor':'middle',class:'t1'});a.textContent=t1;g.appendChild(a);
+  if(t2){const b=el('text',{x:x+w/2,y:y+h/2+13,'text-anchor':'middle',class:'t2'});b.textContent=t2;g.appendChild(b);}
+  S.appendChild(g);return {id,x,y,w,h,cx:x+w/2,cy:y+h/2};
+}
+function wire(id,d,cls){const p=el('path',{d,class:'wire '+(cls||''),id:id,fill:'none'});S.insertBefore(p,S.firstChild);return p;}
+
+const CHMETA=[{id:'CH1',mod:'Drone + Replay/DoS'},{id:'CH2',mod:'Terrestrial + Air/Mar'},{id:'CH3',mod:'Radar classifier'},{id:'CH4',mod:'Cellular downlink'}];
+
+// ---- channel look lists (bands from the design sheet) with group tags for the time-graph colour ----
+function rep(a,n){let o=[];for(let i=0;i<n;i++)o=o.concat(a.map(x=>({...x})));return o;}
+const CH1=rep([{b:'Wi-Fi 2.4',f:'2412–2472',ms:256,g:'a'},{b:'Wi-Fi 5.2',f:'5180–5240',ms:256,g:'a'},{b:'Wi-Fi 5.8',f:'5745–5825',ms:256,g:'a'},{b:'LoRa',f:'865–928',ms:257,g:'a'}],10)
+  .concat([{b:'DroneID',f:'listen',ms:2010,hold:1,g:'b'}]).concat(rep([{b:'433',f:'433',ms:256,g:'c'},{b:'FPV',f:'1080–1280',ms:256,g:'c'},{b:'Video',f:'5645–5945',ms:256,g:'c'}],2));
+const CH2=rep([{b:'D-STAR',f:'145.0',ms:50,g:'a'},{b:'TETRA',f:'420.0',ms:142,g:'a'},{b:'DMR',f:'446.006',ms:150,g:'a'},{b:'P25',f:'450.0',ms:450,g:'a'},{b:'NXDN',f:'451.0',ms:200,g:'a'}],8)
+  .concat([{b:'AIS',f:'161.975',ms:400,g:'b'},{b:'ADS-B',f:'1090',ms:400,g:'b'}]);
+function lk(b,f,n,g){let o=[];for(let i=0;i<n;i++)o.push({b,f,ms:160,g});return o;}
+const CH3=lk('L','1200–1400',3,'a').concat(lk('S','2700–3100',5,'b'),lk('S','3000–3500',7,'b'),lk('C','5140–5900',10,'c'),lk('C','5400–5900',7,'c'));
+const CH4=[['2G','925.2–934.8','c'],['2G','935.2–959.8','c'],['2G','1805–1880','c'],['B28','758–803','a'],['B5','869–894','a'],['B8','925–960','a'],['B3','1805–1880','a'],['B1','2110–2170','a'],['B40','2300–2400','b'],['B40','2300–2400','b'],['n78','3300–3670','c'],['n78','3300–3670','c'],['n78','3300–3670','c'],['n78','3300–3670','c'],['n78','3300–3670','c']].map(x=>({b:x[0],f:x[1],ms:20,g:x[2]}));
+const CHS=[{id:'CH1',frameS:'14.26 s',looks:CH1,pdet:.05},{id:'CH2',frameS:'9.16 s',looks:CH2,pdet:.06},{id:'CH3',frameS:'5.12 s',looks:CH3,pdet:.04},{id:'CH4',frameS:'0.30 s',looks:CH4,pdet:.05}];
+CHS.forEach((c,i)=>{c.idx=i;c.ptr=0;c.lookT=0;c.emitT=0;c.cum=[];let s=0;c.looks.forEach(l=>{c.cum.push(s);s+=l.ms;});c.frameMs=s;});
+
+const GCOL={a:'#dce8fb',b:'#d9efe1',c:'#eceff3'};
+
+// ---- top: antennas + USRP (4 channel time-graphs) + scheduler ----
+const bAnt=box('ant',140,12,720,26,'Antennas × 4','MON own LO · DF shared LO');
+const uX=140,uY=46,uW=720,uH=152;
+const gU=el('g',{});
+gU.appendChild(el('rect',{x:uX,y:uY,width:uW,height:uH,rx:7,class:'blk','data-blk':'usrp'}));
+const utitle=el('text',{x:uX+uW/2,y:uY+16,'text-anchor':'middle',class:'t1',id:'utitle'});
+utitle.textContent='USRP-2945 — 4 channels, each own LO (live frame time-graph)';gU.appendChild(utitle);
+S.appendChild(gU);
+const BX=236, BW=560;          // timeline bar left and width inside USRP
+CHS.forEach((c,i)=>{
+  const ry=70+i*30, by=ry, bh=18;
+  const g=el('g',{});
+  const lab=el('text',{x:150,y:ry+13,class:'t1',style:'font-size:11px'});lab.textContent='ch'+i;g.appendChild(lab);
+  const fs=el('text',{x:150,y:ry+25,class:'t2',style:'font-size:8.5px'});fs.textContent=c.frameS;g.appendChild(fs);
+  // segments
+  c.looks.forEach((l,k)=>{const sx=BX+(c.cum[k]/c.frameMs)*BW, sw=Math.max(0.6,(l.ms/c.frameMs)*BW);
+    g.appendChild(el('rect',{x:sx,y:by,width:sw,height:bh,fill:GCOL[l.g],stroke:'#c9d0d9','stroke-width':0.3}));});
+  g.appendChild(el('rect',{x:BX,y:by,width:BW,height:bh,fill:'none',stroke:'#c9d0d9','stroke-width':0.6,rx:2}));
+  // playhead
+  g.appendChild(el('line',{x1:BX,y1:by-2,x2:BX,y2:by+bh+2,stroke:'#e02424','stroke-width':2,id:'ph'+i}));
+  // current band at right
+  const uf=el('text',{x:BX+BW+8,y:ry+13,id:'uf'+i,style:'font:600 9.5px sans-serif;fill:#1769e0'});uf.textContent='—';g.appendChild(uf);
+  S.appendChild(g);
+  c.bar={BX,BW,by,bh};
+});
+// DF overlay across the timelines (shown only in DF)
+const dfOver=el('g',{id:'dfover',visibility:'hidden'});
+dfOver.appendChild(el('rect',{x:uX+6,y:66,width:uW-12,height:126,rx:5,fill:'rgba(224,36,36,0.07)',stroke:'#e02424','stroke-width':1,'stroke-dasharray':'5 3'}));
+const dot=el('text',{x:uX+uW/2,y:132,'text-anchor':'middle',id:'dftext',style:'font:600 12px sans-serif;fill:#e02424'});dot.textContent='DF — 4 channels on ONE shared LO';dfOver.appendChild(dot);
+S.appendChild(dfOver);
+
+const bSched=box('sched',360,212,280,44,'Scheduler (C++)','MON frames · DF bursts');
+const bAoa=box('aoa',700,212,150,44,'AOA','az / el');
+wire('w_au','M500 38 V46','');
+wire('w_us','M500 198 V212','');
+wire('w_sa','M640 234 H700','');
+
+// ---- four columns ----
+const colX=[70,290,510,730], colW=190;
+const PS=[],MOD=[],UI=[];
+colX.forEach((x,i)=>{
+  PS.push(box('ps'+i,x,290,colW,40,'Pub-Sub '+(i+1),CHMETA[i].id+' · IQ+FFT'));
+  MOD.push(box('mod'+i,x,368,colW,46,CHMETA[i].mod,CHMETA[i].id));
+  UI.push(box('ui'+i,x,452,colW,32,'UI',''));
+  wire('wsp'+i,`M500 256 C500 272, ${x+colW/2} 272, ${x+colW/2} 290`,'');
+  wire('wpm'+i,`M${x+colW/2} 330 V368`,'');
+  wire('wmu'+i,`M${x+colW/2} 414 V452`,'');
+  wire('wmc'+i,`M${x+10} 391 H30 V528`,'wmc');
+});
+const bCtrl=box('ctrl',70,528,420,38,'Control Pub-Sub','detections · DF requests');
+const bDF=box('dfps',540,528,420,38,'DF Pub-Sub','IQ+FFT + az/el (DF only)');
+wire('w_cs','M30 528 V234 H360','wctrl');
+wire('w_adf','M775 256 V508 H750 V528','wadf');
+wire('w_dfm','M540 547 H520 V391','wdfm');
+
+CHMETA.forEach((m,i)=>{const t=el('text',{x:MOD[i].cx,y:MOD[i].y+MOD[i].h+14,'text-anchor':'middle',class:'t2',id:'now'+i});S.appendChild(t);});
+CHMETA.forEach((m,i)=>{const g=el('g',{id:'badge'+i,visibility:'hidden'});
+  g.appendChild(el('circle',{cx:MOD[i].x+MOD[i].w-12,cy:MOD[i].y+12,r:8,fill:'#e02424'}));
+  const tx=el('text',{x:MOD[i].x+MOD[i].w-12,y:MOD[i].y+15,'text-anchor':'middle',fill:'#fff',font:'bold 9px sans-serif'});tx.textContent='!';g.appendChild(tx);S.appendChild(g);});
+S.appendChild(el('text',{x:360,y:280,class:'t2',id:'qlabel'})).textContent='DF queue: —';
+S.appendChild(el('text',{x:70,y:588,class:'t2'})).textContent='USRP time-graph: coloured = look groups, red line = where each channel is now · blue pulse = MON data · red pulse = DF';
+
+// ---- pulses ----
+const pulses=[];const pulseLayer=el('g',{});S.appendChild(pulseLayer);
+function emitFrac(p,color,dur){pulses.push({path:p,len:p.getTotalLength(),color,dur,t:0});}
+function stepPulses(dt){for(let i=pulses.length-1;i>=0;i--){const pu=pulses[i];pu.t+=dt;const f=pu.t/pu.dur;
+  if(f>=1){if(pu.node)pu.node.remove();pulses.splice(i,1);continue;}
+  const pt=pu.path.getPointAtLength(f*pu.len);
+  if(!pu.node){pu.node=el('circle',{r:4,fill:pu.color});pulseLayer.appendChild(pu.node);}
+  pu.node.setAttribute('cx',pt.x);pu.node.setAttribute('cy',pt.y);}}
+
+// ---- state ----
+let speed=1,paused=false,auto=false,mode='MON',clock=0,last=performance.now();
+let queue=[],df=null;
+let schedMode='priority';                        // 'priority' | 'emergency'
+let emergencyTargets=[];                          // [{ch, f}] specific bands to find in emergency
+let activeTier=null;                              // which module's band sub-menu is open
+const DRONE_CYCLES=5, OTHER_CYCLES=2;
+const TIERNAME={0:'Drone / Replay',1:'Terrestrial',2:'Radar',3:'Cellular/IMSI',gnss:'GNSS'};
+// bands per module (from the design sheet) that emergency DF can target
+const BANDS={
+  0:['2412–2472','5180–5240','5745–5825','865–928 (LoRa)'],
+  1:['145.0','420.0','446.006','450.0','451.0','161.975','1090'],
+  2:['1200–1400','2700–3100','3000–3500','5140–5900','5400–5900'],
+  3:['925.2–934.8','935.2–959.8','1805–1880','758–803','869–894','925–960','2110–2170','2300–2400','3300–3670']
+};
+function hasTarget(ch,f){return emergencyTargets.some(t=>t.ch===ch&&t.f===f);}
+function tierCount(ch){return emergencyTargets.filter(t=>t.ch===ch).length;}
+function servable(q){return true;}
+function haveServable(){return queue.length>0;}
+const log=document.getElementById('log');
+function now(){return (clock/1000).toFixed(2);}
+function L(h){const d=document.createElement('div');d.innerHTML=`<span class="lt">${now()}s</span> ${h}`;log.appendChild(d);while(log.children.length>100)log.removeChild(log.firstChild);log.scrollTop=log.scrollHeight;}
+function lit(id,on,red){const r=S.querySelector(`[data-blk="${id}"]`);if(r)r.setAttribute('class','blk'+(on?(red?' litR':' lit'):''));}
+function dimCol(i,off){['ps'+i,'mod'+i,'ui'+i].forEach(id=>{const r=S.querySelector(`[data-blk="${id}"]`);if(r)r.classList.toggle('dim',off);});
+  ['wsp'+i,'wpm'+i,'wmu'+i].forEach(id=>{const w=document.getElementById(id);if(w)w.classList.toggle('dim',off);});}
+
+function channelFlow(c,realDt){
+  if(mode==='DF')return;
+  c.lookT+=realDt*1000*speed;
+  c.emitT+=realDt;
+  if(c.emitT>0.28){c.emitT=0;
+    emitFrac(document.getElementById('wsp'+c.idx),'#1769e0',0.5);
+    emitFrac(document.getElementById('wpm'+c.idx),'#1769e0',0.4);
+    emitFrac(document.getElementById('wmu'+c.idx),'#1769e0',0.4);}
+  let look=c.looks[c.ptr],advanced=false;
+  while(c.lookT>=look.ms){c.lookT-=look.ms;c.ptr=(c.ptr+1)%c.looks.length;look=c.looks[c.ptr];advanced=true;}
+  if(advanced){const nl=c.looks[c.ptr];
+    document.getElementById('now'+c.idx).textContent=nl.b+' '+nl.f;
+    document.getElementById('uf'+c.idx).textContent=nl.f;c.curf=nl.f;
+    if(!nl.hold && Math.random()<c.pdet)detect(c,nl);}
+  // playhead
+  const pos=c.cum[c.ptr]+c.lookT;
+  const x=c.bar.BX+(pos/c.frameMs)*c.bar.BW;
+  const ph=document.getElementById('ph'+c.idx);ph.setAttribute('x1',x);ph.setAttribute('x2',x);
+}
+function detect(c,look){
+  if(queue.some(q=>q.ch===c.idx)||(df&&df.serve.some(b=>b.ch===c.idx)))return;
+  queue.push({ch:c.idx,id:c.id,mod:CHMETA[c.idx].mod,freq:look.b+' '+look.f});
+  lit('mod'+c.idx,true,true);document.getElementById('badge'+c.idx).setAttribute('visibility','visible');
+  emitFrac(document.getElementById('wmc'+c.idx),'#e02424',0.6);
+  setTimeout(()=>emitFrac(document.getElementById('w_cs'),'#e02424',0.7),250);
+  L(`<span class="lr">▲ detection</span> ${c.id} (${look.b} ${look.f}) → control Pub-Sub → scheduler: <span class="lr">DF request</span> (queue ${queue.length})`);
+  updateQueueView();updateApprove();tryDF();
+}
+function updateQueueView(){const q=document.getElementById('qlabel');
+  q.textContent=queue.length?('DF queue ('+queue.length+'): '+queue.map(x=>x.id).join(' · ')):'DF queue: —';
+  q.setAttribute('fill',queue.length?'#e02424':'#6b7280');}
+function updateApprove(){const b=document.getElementById('approveBtn');
+  let show=false,label='Approve DF';
+  if(mode==='MON'&&!df){
+    if(schedMode==='emergency'){const n=emergencyTargets.length;
+      if(n){show=true;label='▶ Start DF — '+n+' band'+(n>1?'s':'');}}
+    else {const n=queue.length;if(n){show=true;label=n>1?('Approve DF ('+n+')'):'Approve DF';}}
+  }
+  b.textContent=label;b.style.display=show?'inline-block':'none';}
+function tryDF(){/* fully manual: DF starts only from the Approve / Start button */}
+
+function startDF(){
+  if(df)return;
+  if(schedMode!=='emergency' && !haveServable())return;   // priority needs a request; emergency runs on its own
+  let serve=[],how='';
+  if(schedMode==='emergency'){
+    if(!emergencyTargets.length)return;                // specific bands chosen by the operator
+    emergencyTargets.forEach(t=>serve.push({ch:t.ch,id:CHS[t.ch].id,mod:CHMETA[t.ch].mod,freq:t.f,emer:true}));
+    how='EMERGENCY — '+emergencyTargets.length+' band(s) (continuous)';
+  }else{
+    const batch=queue.splice(0);
+    const drone=batch.filter(r=>r.ch===0), others=batch.filter(r=>r.ch!==0);
+    for(let cy=1;cy<=DRONE_CYCLES;cy++){
+      drone.forEach(r=>serve.push({...r,cyc:cy}));
+      if(cy<=OTHER_CYCLES)others.forEach(r=>serve.push({...r,cyc:cy}));
+    }
+    how=`priority — drone ×${DRONE_CYCLES}, others ×${OTHER_CYCLES}`;
+  }
+  if(!serve.length)return;
+  updateQueueView();updateApprove();
+  mode='DF';for(let i=0;i<4;i++){dimCol(i,true);lit('mod'+i,false);}
+  document.getElementById('w_adf').classList.remove('dim');
+  lit('sched',true,true);lit('aoa',true,true);lit('dfps',true,true);lit('usrp',true,true);
+  document.getElementById('utitle').textContent='USRP-2945 — DF: 4 channels → ONE shared LO (coherent)';
+  document.getElementById('dfover').setAttribute('visibility','visible');
+  document.getElementById('backMonBtn').style.display='inline-block';
+  df={serve,i:0,phase:'switch',t:0,how,continuous:(schedMode==='emergency'),pass:1};setModePill();
+  L(`<span class="lr">◼ DF start</span> — MON links OFF · ${how} · ${serve.length} looks`);
+  beginItem();
+}
+function setModePill(){const mp=document.getElementById('modePill');mp.className='pill df';
+  mp.textContent=df.continuous?('MODE: DF · pass '+df.pass+' ('+(df.i+1)+'/'+df.serve.length+')'):('MODE: DF ('+(df.i+1)+'/'+df.serve.length+')');}
+function beginItem(){const req=df.serve[df.i];
+  req.az=Math.round(Math.random()*359);req.el=Math.round(Math.random()*80+5);
+  document.getElementById('badge'+req.ch).setAttribute('visibility','hidden');
+  document.getElementById('w_dfm').setAttribute('d',`M540 547 H${MOD[req.ch].cx} V414`);
+  // all 4 channels tune to the SAME band on the shared LO
+  for(let i=0;i<4;i++)document.getElementById('uf'+i).textContent=req.freq;
+  const cyc=req.cyc?(' · cycle '+req.cyc):'';
+  document.getElementById('dftext').textContent='DF '+(df.i+1)+'/'+df.serve.length+' — '+req.id+' @ '+req.freq+cyc+' · shared LO · IQ + FFT';
+  setModePill();
+  L(`<span class="lr">→ DF ${df.i+1}/${df.serve.length}</span> ${req.id} ${req.freq}${cyc} — shared-LO bursts`);
+}
+function holdDF(){const mp=document.getElementById('modePill');mp.className='pill df';mp.textContent='MODE: DF — idle';
+  document.getElementById('dftext').textContent='DF idle — press ◻ Back to MON to resume monitoring';
+  if(!df.held){df.held=true;L('<span class="lr">■ DF idle</span> — finished; staying in DF until ◻ Back to MON');}}
+function stepDF(realDt){
+  if(df.phase==='hold'){
+    if(df.continuous&&schedMode==='emergency'&&emergencyTargets.length){
+      df.serve=emergencyTargets.map(t=>({ch:t.ch,id:CHS[t.ch].id,mod:CHMETA[t.ch].mod,freq:t.f,emer:true}));
+      df.i=0;df.pass++;df.held=false;df.phase='burst';df.t=0;beginItem();}
+    return;}
+  df.t+=realDt*1000*speed;const req=df.serve[df.i];
+  if(df.phase==='switch'&&df.t>500){df.phase='burst';df.t=0;emitFrac(document.getElementById('w_us'),'#e02424',0.5);
+    L(`<span class="lr">… DF bursts</span> ${req.id} ${req.freq}: 4 coherent channels capture <b>IQ + FFT</b> → AOA`);}
+  else if(df.phase==='burst'&&df.t>700){df.phase='aoa';df.t=0;emitFrac(document.getElementById('w_sa'),'#e02424',0.5);}
+  else if(df.phase==='aoa'&&df.t>600){df.phase='send';df.t=0;lit('mod'+req.ch,true,true);
+    emitFrac(document.getElementById('w_adf'),'#e02424',0.6);
+    setTimeout(()=>emitFrac(document.getElementById('w_dfm'),'#e02424',0.6),300);
+    L(`<span class="lg">● result</span> ${req.id}: <b>IQ + FFT</b> + az <b>${req.az}°</b> el <b>${req.el}°</b> → DF Pub-Sub → ${req.mod} → UI`);}
+  else if(df.phase==='send'&&df.t>700){lit('mod'+req.ch,false);df.i++;
+    if(df.i<df.serve.length){df.phase='burst';df.t=0;beginItem();}
+    else if(df.continuous && schedMode==='emergency' && emergencyTargets.length){
+      // continuous emergency: rebuild from the current band selection and loop
+      df.serve=emergencyTargets.map(t=>({ch:t.ch,id:CHS[t.ch].id,mod:CHMETA[t.ch].mod,freq:t.f,emer:true}));
+      df.i=0;df.pass++;df.phase='burst';df.t=0;beginItem();}
+    else {df.phase='hold';holdDF();}}   // finished: stay in DF until Back to MON
+}
+function endDF(){mode='MON';document.getElementById('backMonBtn').style.display='none';
+  for(let i=0;i<4;i++){dimCol(i,false);lit('mod'+i,false);document.getElementById('badge'+i).setAttribute('visibility','hidden');}
+  lit('sched',false);lit('aoa',false);lit('dfps',false);lit('usrp',false);
+  document.getElementById('utitle').textContent='USRP-2945 — 4 channels, each own LO (live frame time-graph)';
+  document.getElementById('dfover').setAttribute('visibility','hidden');
+  document.getElementById('w_adf').classList.add('dim');
+  document.getElementById('w_dfm').setAttribute('d','M540 547 H520 V391');
+  const mp=document.getElementById('modePill');mp.className='pill mon';mp.textContent='MODE: MON';
+  L('<span class="lb">◻ back to MON</span> — 4 links on');df=null;updateApprove();tryDF();
+}
+
+// ---- controls ----
+document.querySelectorAll('.spd').forEach(b=>b.onclick=()=>{document.querySelectorAll('.spd').forEach(x=>x.classList.remove('on'));b.classList.add('on');speed=+b.dataset.s;});
+document.getElementById('pauseBtn').onclick=e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause';last=performance.now();};
+document.getElementById('approveBtn').onclick=startDF;
+document.getElementById('backMonBtn').onclick=()=>{
+  if(!df)return;
+  if(df.continuous){            // emergency: stop finding and return to monitoring
+    L('<span class="lb">◻ operator: Back to MON</span> — emergency DF stopped');
+    leaveEmergency();endDF();return;}
+  // re-queue the requests not yet served (unique channels), so nothing is lost
+  const servedCh=new Set(df.serve.slice(0,df.i+1).map(s=>s.ch));
+  const pend=[...new Set(df.serve.slice(df.i+1).map(s=>s.ch))].filter(ch=>!servedCh.has(ch));
+  pend.forEach(ch=>{if(!queue.some(q=>q.ch===ch))queue.push({ch,id:CHS[ch].id,mod:CHMETA[ch].mod,freq:'(re-queued)'});});
+  L(`<span class="lb">◻ operator: Back to MON</span> — DF stopped at ${df.i+1}/${df.serve.length}${pend.length?(' · re-queued '+pend.map(c=>CHS[c].id).join(', ')):''}`);
+  endDF();updateQueueView();
+};
+
+// DF scheduling mode controls
+const emergLabel=document.getElementById('emergLabel');
+const bandRow=document.getElementById('bandRow');
+function setEmergLabel(){
+  if(schedMode!=='emergency'){emergLabel.textContent='';return;}
+  if(emergencyTargets.length){
+    const byTier={};emergencyTargets.forEach(t=>{(byTier[t.ch]=byTier[t.ch]||[]).push(t.f);});
+    const parts=Object.keys(byTier).map(ch=>TIERNAME[ch]+': '+(byTier[ch].length===BANDS[ch].length?'ALL':byTier[ch].join(', ')));
+    emergLabel.innerHTML='<span class="lr">● EMERGENCY — finding '+parts.join('  ·  ')+' · press ▶ Start DF · continuous until ◻ Back to MON</span>';
+  } else emergLabel.innerHTML='<span class="lr">● EMERGENCY — pick a module, then its bands (All or specific), then ▶ Start DF</span>';
+}
+// highlight each module button if it has any selected band
+function refreshTierButtons(){document.querySelectorAll('.tier').forEach(b=>{
+  const v=b.dataset.t; if(v==='gnss'){b.classList.remove('on');return;}
+  b.classList.toggle('on',tierCount(+v)>0);});}
+// draw the band sub-menu for the open module
+function renderBandRow(){
+  bandRow.innerHTML='';
+  if(activeTier===null){bandRow.style.display='none';return;}
+  bandRow.style.display='inline-flex';
+  if(activeTier==='gnss'){const s=document.createElement('span');s.className='lt';
+    s.textContent='GNSS has no channel yet — no bands.';bandRow.appendChild(s);return;}
+  const ch=activeTier, list=BANDS[ch];
+  const lab=document.createElement('span');lab.className='lt';lab.textContent=TIERNAME[ch]+' bands:';bandRow.appendChild(lab);
+  const allBtn=document.createElement('button');
+  const allOn=tierCount(ch)===list.length;
+  allBtn.textContent='All '+TIERNAME[ch];allBtn.className='tier'+(allOn?' on':'');
+  allBtn.onclick=()=>{ if(tierCount(ch)===list.length){emergencyTargets=emergencyTargets.filter(t=>t.ch!==ch);}
+    else{list.forEach(f=>{if(!hasTarget(ch,f))emergencyTargets.push({ch,f});});} afterSelect();};
+  bandRow.appendChild(allBtn);
+  list.forEach(f=>{const b=document.createElement('button');b.textContent=f;
+    b.className='tier'+(hasTarget(ch,f)?' on':'');
+    b.onclick=()=>{ if(hasTarget(ch,f))emergencyTargets=emergencyTargets.filter(t=>!(t.ch===ch&&t.f===f));
+      else emergencyTargets.push({ch,f}); afterSelect();};
+    bandRow.appendChild(b);});
+}
+function afterSelect(){renderBandRow();refreshTierButtons();setEmergLabel();updateApprove();}
+function leaveEmergency(){schedMode='priority';emergencyTargets=[];activeTier=null;
+  document.getElementById('schedNormal').classList.add('on');
+  document.getElementById('emergBtn').classList.remove('on');
+  document.getElementById('tierRow').style.display='none';bandRow.style.display='none';
+  document.querySelectorAll('.tier').forEach(t=>t.classList.remove('on'));
+  setEmergLabel();updateApprove();}
+document.getElementById('schedNormal').onclick=()=>{leaveEmergency();};  // DF (if any) holds until Back to MON
+document.getElementById('emergBtn').onclick=()=>{schedMode='emergency';
+  document.getElementById('tierRow').style.display='inline-flex';
+  document.getElementById('emergBtn').classList.add('on');
+  document.getElementById('schedNormal').classList.remove('on');setEmergLabel();};
+document.querySelectorAll('.tier').forEach(t=>t.onclick=()=>{
+  schedMode='emergency';
+  activeTier=(t.dataset.t==='gnss')?'gnss':(+t.dataset.t);   // open this module's band menu
+  renderBandRow();setEmergLabel();
+});
+document.getElementById('tierClear').onclick=()=>document.getElementById('schedNormal').click();
+
+document.getElementById('w_adf').classList.add('dim');
+CHS.forEach((c,i)=>{document.getElementById('now'+i).textContent=c.looks[0].b+' '+c.looks[0].f;c.curf=c.looks[0].f;document.getElementById('uf'+i).textContent=c.looks[0].f;});
+L('<span class="lb">system start</span> — MON: 4 channels scanning (see the time-graphs in the USRP). Manual: Approve DF (priority) or pick tiers + ▶ Start DF (emergency); ◻ Back to MON to return.');
+
+function loop(ts){let real=(ts-last)/1000;last=ts;if(real>0.1)real=0.1;
+  if(!paused){clock+=real*1000*speed;document.getElementById('clock').textContent=(clock/1000).toFixed(2)+' s';
+    if(df)stepDF(real);else CHS.forEach(c=>channelFlow(c,real));stepPulses(real);}
+  requestAnimationFrame(loop);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

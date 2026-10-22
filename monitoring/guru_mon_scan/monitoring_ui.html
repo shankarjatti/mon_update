@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitoring Control</title>
+<style>
+  :root{--bg:#f4f6f9;--panel:#fff;--ink:#1a1f2b;--muted:#6b7280;--line:#d7dce3;
+    --blue:#1769e0;--blue-soft:#eaf2fd;--red:#e02424;--red-soft:#fdecec;--green:#1a9e5a;--amber:#b8860b}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  body{padding:14px;max-width:1180px;margin:0 auto}
+  h1{font-size:18px;margin:0}
+  .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:#fff}
+  .chip b{font-weight:700}
+  .chip.ok{background:var(--blue-soft);color:var(--blue);border-color:#bcd6f7}
+  .chip.warn{background:#fff6e5;color:var(--amber);border-color:#f0d99a}
+  .chip.bad{background:var(--red-soft);color:var(--red);border-color:#f3b8b8}
+  label{font-size:12px;color:var(--muted)}
+  input,select{font:inherit;border:1px solid var(--line);border-radius:6px;padding:5px 7px;background:#fff;color:var(--ink)}
+  input.num{width:84px;text-align:right}
+  input.f{width:96px;text-align:right}
+  button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;padding:6px 11px;cursor:pointer}
+  button:hover{background:#eef1f5}
+  button.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+  button.pri:hover{filter:brightness(1.05)}
+  button.x{border-color:#f3b8b8;color:var(--red);padding:2px 8px;line-height:1.2}
+  button.x:hover{background:var(--red-soft)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card h2{font-size:14px;margin:0}
+  .chead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .port{color:var(--muted);font-size:11px}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+  th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11px}
+  td.r,th.r{text-align:right}
+  tr:last-child td{border-bottom:none}
+  .addrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .addrow input.nm{flex:1;min-width:120px}
+  .frame{margin-top:8px;font-size:12px;color:var(--muted)}
+  .frame b{color:var(--ink)}
+  .foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
+  .note{font-size:12px;color:var(--muted)}
+  .lock{width:9px;height:9px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:4px}
+</style>
+</head>
+<body>
+<h1>SecureCOM — Monitoring Control</h1>
+<div class="sub">Backend configuration: per‑channel bands, dwell &amp; switching time, hardware state. Four channels, one page.</div>
+
+<div class="bar">
+  <div class="chips" id="hwchips"></div>
+  <div class="chips">
+    <label>Switch (ms) <input class="num" id="switchMs" type="number" min="0" step="1"></label>
+    <label>Sample rate (MS/s) <input class="num" id="sampMs" type="number" min="0.1" step="0.1"></label>
+    <label>RX gain (dB) <input class="num" id="gain" type="number" min="0" max="93" step="1" value="45"></label>
+  </div>
+</div>
+
+<div class="grid" id="channels"></div>
+
+<div class="foot">
+  <button class="pri" id="applyBtn">Apply to backend</button>
+  <button id="exportBtn">Export scan_plan JSON</button>
+  <button id="resetBtn">Reset to saved</button>
+  <span class="note" id="status"></span>
+</div>
+<div class="note">Apply pushes this config to the monitoring backend (mon_scan/mon_server) when its control API is wired. Export downloads the JSON that regenerates scan_plan. Hardware state is live when the backend is running.</div>
+
+<script>
+const PORTS_HW = ["A/RX1","A/RX2","B/RX1","B/RX2"];
+// initial config (from scan_plan). Edited live; Export/Apply writes it back.
+const INITIAL = {"switch_ms": 10.0, "samp_rate": 2000000.0, "channels": [{"name": "CH1 Drone/Replay", "port": "A/RX1", "bands": [{"name": "Wi-Fi 2.4 2412-2472", "freq_mhz": 2442.0, "dwell_ms": 256.0}, {"name": "Wi-Fi 5.2 5180-5240", "freq_mhz": 5210.0, "dwell_ms": 256.0}, {"name": "Wi-Fi 5.8 5745-5825", "freq_mhz": 5785.0, "dwell_ms": 256.0}, {"name": "LoRa 865-928", "freq_mhz": 896.5, "dwell_ms": 257.0}, {"name": "Drone 433", "freq_mhz": 433.9, "dwell_ms": 256.0}, {"name": "FPV 1080-1280", "freq_mhz": 1180.0, "dwell_ms": 256.0}, {"name": "Video 5645-5945", "freq_mhz": 5795.0, "dwell_ms": 256.0}]}, {"name": "CH2 Terrestrial", "port": "A/RX2", "bands": [{"name": "D-STAR 145.0", "freq_mhz": 145.0, "dwell_ms": 50.0}, {"name": "TETRA 420.0", "freq_mhz": 420.0, "dwell_ms": 142.0}, {"name": "DMR 446.100", "freq_mhz": 446.1, "dwell_ms": 150.0}, {"name": "P25 450.0", "freq_mhz": 450.0, "dwell_ms": 450.0}, {"name": "NXDN 451.0", "freq_mhz": 451.0, "dwell_ms": 200.0}, {"name": "AIS 161.975", "freq_mhz": 161.975, "dwell_ms": 400.0}, {"name": "ADS-B 1090", "freq_mhz": 1090.0, "dwell_ms": 400.0}]}, {"name": "CH3 Radar", "port": "B/RX1", "bands": [{"name": "L 1200-1400", "freq_mhz": 1300.0, "dwell_ms": 150.0}, {"name": "S 2700-3100", "freq_mhz": 2900.0, "dwell_ms": 150.0}, {"name": "S 3000-3500", "freq_mhz": 3250.0, "dwell_ms": 150.0}, {"name": "C 5140-5900", "freq_mhz": 5520.0, "dwell_ms": 150.0}, {"name": "C 5400-5900", "freq_mhz": 5650.0, "dwell_ms": 150.0}]}, {"name": "CH4 Cellular DL", "port": "B/RX2", "bands": [{"name": "2G 925.2-934.8", "freq_mhz": 930.0, "dwell_ms": 10.0}, {"name": "2G 935.2-959.8", "freq_mhz": 947.5, "dwell_ms": 10.0}, {"name": "2G 1805-1880", "freq_mhz": 1842.5, "dwell_ms": 10.0}, {"name": "B28 758-803", "freq_mhz": 780.5, "dwell_ms": 10.0}, {"name": "B5 869-894", "freq_mhz": 881.5, "dwell_ms": 10.0}, {"name": "B8 925-960", "freq_mhz": 942.5, "dwell_ms": 10.0}, {"name": "B1 2110-2170", "freq_mhz": 2140.0, "dwell_ms": 10.0}, {"name": "B40 2300-2400", "freq_mhz": 2350.0, "dwell_ms": 10.0}, {"name": "n78 3300-3670", "freq_mhz": 3485.0, "dwell_ms": 10.0}]}]};
+let CFG = JSON.parse(JSON.stringify(INITIAL));
+
+// ---- hardware state (static placeholders until the backend feeds it live) ----
+const HW = {
+  usrp:"X310 31082D8", link:"1 Gb/s", mode:"MON",
+  lock:[null,null,null,null],   // per-channel LO lock: true/false/null(unknown)
+  overflow:false, cpu_gov:"performance"
+};
+function renderHW(){
+  const el=document.getElementById('hwchips');
+  const lockChips = CFG.channels.map((c,i)=>{
+    const v=HW.lock[i]; const col = v===true?'#1a9e5a': v===false?'#e02424':'#c9d0d9';
+    return `<span class="chip"><span class="lock" style="background:${col}"></span>CH${i+1} LO</span>`;
+  }).join('');
+  el.innerHTML =
+    `<span class="chip ok">USRP <b>${HW.usrp}</b></span>`+
+    `<span class="chip ${HW.link.startsWith('1')?'warn':'ok'}">Link <b>${HW.link}</b></span>`+
+    `<span class="chip ok">Mode <b>${HW.mode}</b></span>`+
+    `<span class="chip ${HW.overflow?'bad':'ok'}">Overflow <b>${HW.overflow?'yes':'no'}</b></span>`+
+    `<span class="chip">CPU <b>${HW.cpu_gov}</b></span>`+ lockChips;
+}
+
+function frameMs(ch){ return ch.bands.reduce((s,b)=>s+Number(b.dwell_ms)+Number(CFG.switch_ms),0); }
+
+function render(){
+  document.getElementById('switchMs').value = CFG.switch_ms;
+  document.getElementById('sampMs').value = (CFG.samp_rate/1e6);
+  const wrap=document.getElementById('channels'); wrap.innerHTML='';
+  CFG.channels.forEach((ch,ci)=>{
+    const card=document.createElement('div'); card.className='card';
+    let rows = ch.bands.map((b,bi)=>`
+      <tr>
+        <td><input class="nm" style="width:100%" value="${b.name.replace(/"/g,'&quot;')}" data-c="${ci}" data-b="${bi}" data-k="name"></td>
+        <td class="r"><input class="f" type="number" step="0.0001" value="${b.freq_mhz}" data-c="${ci}" data-b="${bi}" data-k="freq_mhz"></td>
+        <td class="r"><input class="num" type="number" step="1" value="${b.dwell_ms}" data-c="${ci}" data-b="${bi}" data-k="dwell_ms"></td>
+        <td class="r"><button class="x" data-del="${ci}:${bi}">×</button></td>
+      </tr>`).join('');
+    card.innerHTML=`
+      <div class="chead">
+        <h2>${ch.name}</h2>
+        <span class="port">${ch.port} · ${ch.bands.length} bands</span>
+      </div>
+      <table>
+        <thead><tr><th>Band</th><th class="r">Freq MHz</th><th class="r">Dwell ms</th><th class="r"></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="addrow">
+        <input class="nm" placeholder="band name" id="an${ci}">
+        <input class="f" type="number" step="0.0001" placeholder="MHz" id="af${ci}">
+        <input class="num" type="number" step="1" placeholder="dwell ms" id="ad${ci}">
+        <button data-add="${ci}">+ Add band</button>
+      </div>
+      <div class="frame">Frame: <b>${(frameMs(ch)/1000).toFixed(2)} s</b> &nbsp;(${ch.bands.length} looks × dwell + ${CFG.switch_ms} ms switch)</div>`;
+    wrap.appendChild(card);
+  });
+  renderHW();
+  wire();
+}
+
+function wire(){
+  document.querySelectorAll('input[data-k]').forEach(inp=>inp.onchange=()=>{
+    const c=+inp.dataset.c,b=+inp.dataset.b,k=inp.dataset.k;
+    CFG.channels[c].bands[b][k] = (k==='name')?inp.value:Number(inp.value);
+    if(k!=='name') render();
+  });
+  document.querySelectorAll('button[data-del]').forEach(btn=>btn.onclick=()=>{
+    const [c,b]=btn.dataset.del.split(':').map(Number);
+    CFG.channels[c].bands.splice(b,1); render();
+  });
+  document.querySelectorAll('button[data-add]').forEach(btn=>btn.onclick=()=>{
+    const c=+btn.dataset.add;
+    const nm=document.getElementById('an'+c).value.trim();
+    const f=parseFloat(document.getElementById('af'+c).value);
+    const d=parseFloat(document.getElementById('ad'+c).value);
+    if(!nm||isNaN(f)||isNaN(d)){flash('fill name, MHz and dwell');return;}
+    CFG.channels[c].bands.push({name:nm,freq_mhz:f,dwell_ms:d}); render();
+  });
+}
+document.getElementById('switchMs').onchange=e=>{CFG.switch_ms=Number(e.target.value);render();};
+document.getElementById('sampMs').onchange=e=>{CFG.samp_rate=Number(e.target.value)*1e6;};
+document.getElementById('resetBtn').onclick=()=>{CFG=JSON.parse(JSON.stringify(INITIAL));render();flash('reset');};
+document.getElementById('exportBtn').onclick=()=>{
+  const blob=new Blob([JSON.stringify(CFG,null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='scan_plan_config.json';a.click();
+  flash('exported scan_plan_config.json');
+};
+document.getElementById('applyBtn').onclick=()=>flash('Apply: backend control API not wired yet — use Export for now');
+function flash(m){const s=document.getElementById('status');s.textContent=m;setTimeout(()=>{if(s.textContent===m)s.textContent='';},4000);}
+render();
+</script>
+</body>
+</html>

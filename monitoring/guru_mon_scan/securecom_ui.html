@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureCOM Console</title>
+<style>
+  :root{--bg:#f4f6f9;--panel:#fff;--ink:#1a1f2b;--muted:#6b7280;--line:#d7dce3;
+    --blue:#1769e0;--blue-soft:#eaf2fd;--red:#e02424;--red-soft:#fdecec;--green:#1a9e5a;--amber:#b8860b;
+    --grid:#e7ebf1;--plotbg:#fbfcfe}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  body{display:flex;min-height:100vh}
+  /* ---- side nav ---- */
+  .nav{width:208px;flex:0 0 208px;background:var(--panel);border-right:1px solid var(--line);
+    padding:14px 10px;position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{font-size:15px;font-weight:700;padding:2px 6px 10px}
+  .brand small{display:block;color:var(--muted);font-weight:500;font-size:11px;margin-top:2px}
+  .navbtn{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:1px solid transparent;
+    background:transparent;color:var(--ink);border-radius:8px;padding:9px 10px;cursor:pointer;margin:3px 0;font-size:13.5px}
+  .navbtn:hover{background:#eef1f5}
+  .navbtn.on{background:var(--blue-soft);border-color:#bcd6f7;color:var(--blue);font-weight:600}
+  .navbtn .dot{width:8px;height:8px;border-radius:50%;background:#c9d0d9;flex:0 0 8px}
+  .navbtn.on .dot,.navbtn .dot.live{background:var(--green)}
+  .navbtn .dot.bad{background:var(--red)}
+  .navsep{border-top:1px solid var(--line);margin:10px 4px}
+  /* ---- main ---- */
+  .main{flex:1;min-width:0;padding:16px 20px;max-width:1240px}
+  h1{font-size:18px;margin:0}
+  .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:12px 0}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:#fff}
+  .chip b{font-weight:700}
+  .chip.ok{background:var(--blue-soft);color:var(--blue);border-color:#bcd6f7}
+  .chip.warn{background:#fff6e5;color:var(--amber);border-color:#f0d99a}
+  .chip.bad{background:var(--red-soft);color:var(--red);border-color:#f3b8b8}
+  .chip.good{background:#e7f6ee;color:var(--green);border-color:#aedcc3}
+  label{font-size:12px;color:var(--muted)}
+  input,select{font:inherit;border:1px solid var(--line);border-radius:6px;padding:5px 7px;background:#fff;color:var(--ink)}
+  input.num{width:84px;text-align:right}
+  input.f{width:96px;text-align:right}
+  button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;padding:6px 11px;cursor:pointer}
+  button:hover{background:#eef1f5}
+  button.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+  button.pri:hover{filter:brightness(1.05)}
+  button.danger{background:var(--red);border-color:var(--red);color:#fff}
+  button.x{border-color:#f3b8b8;color:var(--red);padding:2px 8px;line-height:1.2}
+  button.x:hover{background:var(--red-soft)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card h2{font-size:14px;margin:0}
+  .chead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .port{color:var(--muted);font-size:11px}
+  /* plots */
+  .plots{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  @media(max-width:900px){.plots{grid-template-columns:1fr}}
+  .plot{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+  .plot h3{font-size:12px;margin:0 0 6px;color:var(--muted);display:flex;justify-content:space-between}
+  .plot h3 b{color:var(--ink);font-weight:700}
+  canvas{width:100%;display:block;background:var(--plotbg);border:1px solid var(--line);border-radius:6px}
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+  th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11px}
+  td.r,th.r{text-align:right}
+  tr:last-child td{border-bottom:none}
+  .addrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .addrow input.nm{flex:1;min-width:120px}
+  .frame{margin-top:8px;font-size:12px;color:var(--muted)}
+  .frame b{color:var(--ink)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  .foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  .note{font-size:12px;color:var(--muted)}
+  .lock{width:9px;height:9px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:4px}
+  .view{display:none}
+  .view.on{display:block}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{border:none;border-radius:0;border-right:1px solid var(--line);padding:5px 12px}
+  .seg button:last-child{border-right:none}
+  .seg button.on{background:var(--blue);color:#fff}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--blue-soft);color:var(--blue);border:1px solid #bcd6f7;font-weight:600}
+  .pill.red{background:var(--red-soft);color:var(--red);border-color:#f3b8b8}
+  .det td{font-variant-numeric:tabular-nums}
+  .badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px}
+  .badge.on{background:#e7f6ee;color:var(--green)}
+  .badge.off{background:#f0f2f5;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="brand">SecureCOM<small>X310 31082D8 · GR 3.8 / UHD 3.15</small></div>
+  <button class="navbtn on" data-view="drone"><span class="dot"></span>Drone Detection<small style="margin-left:auto;color:var(--muted)">CH1</small></button>
+  <button class="navbtn" data-view="terr"><span class="dot"></span>Terrestrial<small style="margin-left:auto;color:var(--muted)">CH2</small></button>
+  <button class="navbtn" data-view="radar"><span class="dot"></span>Radar Classification<small style="margin-left:auto;color:var(--muted)">CH3</small></button>
+  <button class="navbtn" data-view="imsi"><span class="dot"></span>IMSI Catcher<small style="margin-left:auto;color:var(--muted)">CH4</small></button>
+  <div class="navsep"></div>
+  <button class="navbtn" data-view="backend"><span class="dot"></span>Monitoring Backend</button>
+</nav>
+
+<main class="main">
+
+  <!-- top hardware bar (shared) -->
+  <div class="bar">
+    <div class="chips" id="hwchips"></div>
+    <div class="chips">
+      <span class="pill" id="activeTag">CH1</span>
+      <label>Run <input type="checkbox" id="runToggle" checked></label>
+    </div>
+  </div>
+
+  <!-- ============ SIGNAL VIEWS (CH1..CH4) ============ -->
+  <section class="view on" id="view-drone"></section>
+  <section class="view" id="view-terr"></section>
+  <section class="view" id="view-radar"></section>
+  <section class="view" id="view-imsi"></section>
+
+  <!-- ============ MONITORING BACKEND ============ -->
+  <section class="view" id="view-backend">
+    <h1>Monitoring Backend</h1>
+    <div class="sub">Per‑channel bands, dwell &amp; switching time, hardware state — the scheduler config for mon_scan / mon_server.</div>
+    <div class="bar">
+      <div class="chips">
+        <label>Switch (ms) <input class="num" id="switchMs" type="number" min="0" step="1"></label>
+        <label>Sample rate (MS/s) <input class="num" id="sampMs" type="number" min="0.1" step="0.1"></label>
+        <label>RX gain (dB) <input class="num" id="gain" type="number" min="0" max="93" step="1" value="45"></label>
+      </div>
+    </div>
+    <div class="grid2" id="channels"></div>
+    <div class="foot">
+      <button class="pri" id="applyBtn">Apply to backend</button>
+      <button id="exportBtn">Export scan_plan JSON</button>
+      <button id="resetBtn">Reset to saved</button>
+      <span class="note" id="status"></span>
+    </div>
+    <div class="note">Apply pushes this config to the monitoring backend (mon_scan/mon_server) when its control API is wired. Export downloads the JSON that regenerates scan_plan. Hardware state is live when the backend is running.</div>
+  </section>
+
+</main>
+
+<script>
+/* =================== CONFIG (from scan_plan) =================== */
+const PORTS_HW = ["A/RX1","A/RX2","B/RX1","B/RX2"];
+const INITIAL = {"switch_ms": 10.0, "samp_rate": 2000000.0, "channels": [{"name": "CH1 Drone/Replay", "port": "A/RX1", "bands": [{"name": "Wi-Fi 2.4 2412-2472", "freq_mhz": 2442.0, "dwell_ms": 256.0}, {"name": "Wi-Fi 5.2 5180-5240", "freq_mhz": 5210.0, "dwell_ms": 256.0}, {"name": "Wi-Fi 5.8 5745-5825", "freq_mhz": 5785.0, "dwell_ms": 256.0}, {"name": "LoRa 865-928", "freq_mhz": 896.5, "dwell_ms": 257.0}, {"name": "Drone 433", "freq_mhz": 433.9, "dwell_ms": 256.0}, {"name": "FPV 1080-1280", "freq_mhz": 1180.0, "dwell_ms": 256.0}, {"name": "Video 5645-5945", "freq_mhz": 5795.0, "dwell_ms": 256.0}]}, {"name": "CH2 Terrestrial", "port": "A/RX2", "bands": [{"name": "D-STAR 145.0", "freq_mhz": 145.0, "dwell_ms": 50.0}, {"name": "TETRA 420.0", "freq_mhz": 420.0, "dwell_ms": 142.0}, {"name": "DMR 446.100", "freq_mhz": 446.1, "dwell_ms": 150.0}, {"name": "P25 450.0", "freq_mhz": 450.0, "dwell_ms": 450.0}, {"name": "NXDN 451.0", "freq_mhz": 451.0, "dwell_ms": 200.0}, {"name": "AIS 161.975", "freq_mhz": 161.975, "dwell_ms": 400.0}, {"name": "ADS-B 1090", "freq_mhz": 1090.0, "dwell_ms": 400.0}]}, {"name": "CH3 Radar", "port": "B/RX1", "bands": [{"name": "L 1200-1400", "freq_mhz": 1300.0, "dwell_ms": 150.0}, {"name": "S 2700-3100", "freq_mhz": 2900.0, "dwell_ms": 150.0}, {"name": "S 3000-3500", "freq_mhz": 3250.0, "dwell_ms": 150.0}, {"name": "C 5140-5900", "freq_mhz": 5520.0, "dwell_ms": 150.0}, {"name": "C 5400-5900", "freq_mhz": 5650.0, "dwell_ms": 150.0}]}, {"name": "CH4 Cellular DL", "port": "B/RX2", "bands": [{"name": "2G 925.2-934.8", "freq_mhz": 930.0, "dwell_ms": 10.0}, {"name": "2G 935.2-959.8", "freq_mhz": 947.5, "dwell_ms": 10.0}, {"name": "2G 1805-1880", "freq_mhz": 1842.5, "dwell_ms": 10.0}, {"name": "B28 758-803", "freq_mhz": 780.5, "dwell_ms": 10.0}, {"name": "B5 869-894", "freq_mhz": 881.5, "dwell_ms": 10.0}, {"name": "B8 925-960", "freq_mhz": 942.5, "dwell_ms": 10.0}, {"name": "B1 2110-2170", "freq_mhz": 2140.0, "dwell_ms": 10.0}, {"name": "B40 2300-2400", "freq_mhz": 2350.0, "dwell_ms": 10.0}, {"name": "n78 3300-3670", "freq_mhz": 3485.0, "dwell_ms": 10.0}]}]};
+let CFG = JSON.parse(JSON.stringify(INITIAL));
+
+/* =================== HARDWARE STATE (placeholder until backend feeds it) =================== */
+const HW = { usrp:"X310 31082D8", link:"1 Gb/s", mode:"MON", lock:[true,true,true,true], overflow:false, cpu_gov:"performance" };
+function renderHW(){
+  const lockChips = CFG.channels.map((c,i)=>{
+    const v=HW.lock[i]; const col = v===true?'var(--green)': v===false?'var(--red)':'#c9d0d9';
+    return `<span class="chip"><span class="lock" style="background:${col}"></span>CH${i+1} LO</span>`;
+  }).join('');
+  document.getElementById('hwchips').innerHTML =
+    `<span class="chip ok">USRP <b>${HW.usrp}</b></span>`+
+    `<span class="chip ${HW.link.startsWith('1')?'warn':'ok'}">Link <b>${HW.link}</b></span>`+
+    `<span class="chip good">Mode <b>${HW.mode}</b></span>`+
+    `<span class="chip ${HW.overflow?'bad':'good'}">Overflow <b>${HW.overflow?'yes':'no'}</b></span>`+
+    `<span class="chip">CPU <b>${HW.cpu_gov}</b></span>`+ lockChips;
+}
+
+/* =================== VIEW SWITCHING =================== */
+const VIEWS = ["drone","terr","radar","imsi","backend"];
+const TAGMAP = {drone:"CH1",terr:"CH2",radar:"CH3",imsi:"CH4",backend:"BACKEND"};
+let curView = "drone";
+document.querySelectorAll('.navbtn').forEach(btn=>btn.onclick=()=>{
+  curView = btn.dataset.view;
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('on',b===btn));
+  VIEWS.forEach(v=>document.getElementById('view-'+v).classList.toggle('on',v===curView));
+  document.getElementById('activeTag').textContent = TAGMAP[curView];
+  document.getElementById('activeTag').classList.toggle('red', curView==='imsi');
+});
+
+/* =================== SIGNAL-VIEW SCAFFOLD (FFT / TIME / POLAR) =================== */
+// each signal channel: a header, FFT + Time + Polar canvases, and a detections table.
+function signalViewHTML(cfg){
+  return `
+  <h1>${cfg.title}</h1>
+  <div class="sub">${cfg.sub}</div>
+  <div class="bar">
+    <div class="chips">
+      <span class="chip ok">Band <b id="${cfg.id}-band">${cfg.bands[0]}</b></span>
+      <span class="chip">Center <b id="${cfg.id}-cf">—</b></span>
+      <span class="chip good" id="${cfg.id}-stat">● monitoring</span>
+    </div>
+    <div class="chips">
+      <label>Band
+        <select id="${cfg.id}-bandsel">${cfg.bands.map((b,i)=>`<option value="${i}">${b}</option>`).join('')}</select>
+      </label>
+      <div class="seg" id="${cfg.id}-mode">
+        <button class="on" data-m="scan">Scan</button><button data-m="pin">Pin band</button>
+      </div>
+    </div>
+  </div>
+  <div class="plots">
+    <div class="plot"><h3>FFT — spectrum <b id="${cfg.id}-pk">peak —</b></h3><canvas id="${cfg.id}-fft" height="200"></canvas></div>
+    <div class="plot"><h3>Time — ${cfg.timeLabel} <b id="${cfg.id}-tv">—</b></h3><canvas id="${cfg.id}-time" height="200"></canvas></div>
+    <div class="plot"><h3>${cfg.polarLabel} <b id="${cfg.id}-pv">—</b></h3><canvas id="${cfg.id}-polar" height="230"></canvas></div>
+    <div class="plot"><h3>${cfg.tableTitle} <b id="${cfg.id}-cnt">0</b></h3>
+      <table class="det"><thead>${cfg.tableHead}</thead><tbody id="${cfg.id}-tbody"></tbody></table>
+    </div>
+  </div>`;
+}
+
+const SIGVIEWS = {
+  drone:{ id:"drone", kind:"drone",
+    title:"Drone Detection — CH1", sub:"A/RX2 · Wi‑Fi / LoRa / FPV replay bands · 2.5× beacon‑gap dwell",
+    bands:["Wi‑Fi 2.4 2442","Wi‑Fi 5.2 5210","Wi‑Fi 5.8 5785","LoRa 896.5","Drone 433.9","FPV 1180","Video 5795"],
+    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections",
+    tableHead:"<tr><th>Band</th><th class='r'>MHz</th><th class='r'>RMS dB</th><th class='r'></th><th></th></tr>" },
+  radar:{ id:"radar", kind:"radar",
+    title:"Radar Classification — CH3", sub:"B/RX1 · L / S / C ground radars · pulse PW / PRI / scan",
+    bands:["L 1300","S 2900","S 3250","C 5520","C 5650"],
+    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections",
+    tableHead:"<tr><th>Band</th><th class='r'></th><th class='r'></th><th></th><th>MHz</th></tr>" },
+  imsi:{ id:"imsi", kind:"imsi",
+    title:"IMSI Catcher — CH4", sub:"B/RX2 · 2G/4G/5G downlink · cell / ARFCN survey (DL only)",
+    bands:["2G 930.0","2G 947.5","2G 1842.5","B28 780.5","B5 881.5","B8 942.5","B1 2140","B40 2350","n78 3485"],
+    timeLabel:"|IQ| envelope", polarLabel:"IQ scatter", tableTitle:"Detections",
+    tableHead:"<tr><th>Band</th><th></th><th class='r'>MHz</th><th class='r'>RMS dB</th><th></th></tr>" },
+};
+for(const k in SIGVIEWS){ document.getElementById('view-'+k).innerHTML = signalViewHTML(SIGVIEWS[k]); }
+
+/* =================== CH2 TERRESTRIAL — embed the repo's real consoles =================== */
+// No synthetic plots here: the repo (1stversiondone) already ships the full
+// terrestrial + air/marine UI and its CORE decode. We host it unchanged in an
+// iframe. Land radio -> securecom_gui.html (ws 8787), Air/Marine -> airmaritime
+// _console.html (ws 8887). bridge_server.py reads TCP 7001-7008, which our
+// ch2_proto_pub.py feeds from the CH2 monitoring feed.
+// Served over http (serve_ui.sh from radar2 root): use same-origin relative paths
+// so iframes load in every browser. Opened directly as file://: use absolute file
+// paths (works in Firefox; Chrome blocks cross-folder file:// iframes -> use serve_ui.sh).
+// CH2 land console = the WORKING 4-protocol backupv1 console, served on its own
+// web server (8788) and connected to our live bridge (ws 8787) that the X310
+// scheduler+router feed. Absolute URL so it loads from any origin.
+const REPO = (location.protocol==='file:')
+  ? "file:///home/shankar/radar2/terrestrial_src"
+  : "/terrestrial_src";
+const TERR_SRC = { land: "http://127.0.0.1:8788/securecom_gui.html",
+                   air: REPO+"/airmaritime_console.html" };
+document.getElementById('view-terr').innerHTML = `
+  <h1>Terrestrial Radio — CH2</h1>
+  <div class="sub">A/RX2 · validated 4‑protocol console · CH2 scheduler → header router → decoder</div>
+  <div class="bar">
+    <div class="chips">
+      <label style="font-weight:600;color:var(--ink)">CH2 mode</label>
+      <div class="seg" id="terr-mode">
+        <button class="on" data-m="scan">Mode 1 · Scan all bands</button>
+        <button data-m="auto">Mode 2 · Auto‑detect &amp; hold</button>
+      </div>
+      <span class="chip good" id="terr-modestat">● scanning all terrestrial bands</span>
+    </div>
+    <div class="seg" id="terr-sub">
+      <button class="on" data-s="land">Land radio (DMR/P25/NXDN/TETRA)</button>
+      <button data-s="air">Air &amp; Marine (ADS‑B / AIS)</button>
+    </div>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <iframe id="terr-frame" src="${TERR_SRC.land}" style="width:100%;height:72vh;border:0;display:block;background:#fff"></iframe>
+  </div>
+  <div class="note" style="margin-top:8px"><b>Mode 1</b> scans all terrestrial bands per the plan (shows whatever's there). <b>Mode 2</b> searches all 4 terrestrial protocols for 2 cycles, locks onto the <b>strongest sustained</b> one (active every cycle, clearly above its own floor — a one‑off noise blip never locks) and decodes it continuously, then re‑searches once it's <b>off for 2 dwells</b>. 200 kHz per‑channel detection so close bands (DMR 446 / P25 450 / NXDN 451) don't cross‑trigger. Dwell times follow the monitoring plan.</div>`;
+document.querySelectorAll('#terr-sub button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#terr-sub button').forEach(x=>x.classList.toggle('on',x===b));
+  const f=document.getElementById('terr-frame'); f.src=TERR_SRC[b.dataset.s];
+});
+// CH2 terrestrial mode toggle -> backend (via mon_ws control)
+document.querySelectorAll('#terr-mode button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#terr-mode button').forEach(x=>x.classList.toggle('on',x===b));
+  const mode=b.dataset.m;
+  CH2_MODE = (mode==='auto')?'auto':'scan';
+  try{ if(monWs && monWs.readyState===1) monWs.send(JSON.stringify({cmd:'ch2_mode',mode})); }catch(e){}
+  const el=document.getElementById('terr-modestat');
+  el.textContent = mode==='auto' ? '● searching all terrestrial protocols (2 cycles)…' : '● scanning all terrestrial bands';
+  el.className='chip '+(mode==='auto'?'ok':'good');
+});
+
+/* =================== PER‑VIEW STATE + WIRING =================== */
+const S = {}; // runtime state per view id
+for(const k in SIGVIEWS){
+  const cf = SIGVIEWS[k];
+  S[k] = { band:0, mode:"scan", t:0, fftBg:new Float32Array(256), rows:[] };
+  const sel = document.getElementById(cf.id+'-bandsel');
+  sel.onchange = ()=>{ S[k].band = +sel.value; document.getElementById(cf.id+'-band').textContent = cf.bands[S[k].band]; refreshBandInfo(k); };
+  document.querySelectorAll('#'+cf.id+'-mode button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#'+cf.id+'-mode button').forEach(x=>x.classList.toggle('on',x===b));
+    S[k].mode=b.dataset.m;
+    document.getElementById(cf.id+'-stat').textContent = b.dataset.m==='pin' ? '● pinned (hold band)' : '● monitoring';
+  });
+  refreshBandInfo(k);
+}
+function refreshBandInfo(k){
+  const cf=SIGVIEWS[k], st=S[k];
+  const mhz = cfBandMHz(k, st.band);
+  document.getElementById(cf.id+'-cf').textContent = mhz.toFixed(mhz<1000?3:1)+' MHz';
+}
+function cfBandMHz(k, i){
+  // pull the matching channel's freq from CFG so the backend edits flow through
+  const chIdx = {drone:0,terr:1,radar:2,imsi:3}[k];
+  const b = CFG.channels[chIdx].bands[i];
+  return b ? b.freq_mhz : 0;
+}
+
+/* =================== LIVE PLOTS (real monitoring data only) =================== */
+// All panels draw only what the dwell actually received (from mon_ws_bridge):
+// real spectrum, real |IQ| envelope, real IQ scatter. No synthetic data.
+function drawGrid(ctx,w,h,rows=4,cols=8){
+  ctx.strokeStyle=getCSS('--grid');ctx.lineWidth=1;ctx.beginPath();
+  for(let i=1;i<rows;i++){const y=h*i/rows;ctx.moveTo(0,y);ctx.lineTo(w,y);}
+  for(let i=1;i<cols;i++){const x=w*i/cols;ctx.moveTo(x,0);ctx.lineTo(x,h);}
+  ctx.stroke();
+}
+function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+function fitCanvas(cv){ const w=cv.clientWidth||600; if(cv.width!==w){cv.width=w;} return cv; }
+
+/* ====== LIVE monitoring feed (mon_ws_bridge) ====== */
+const MON = {1:null,2:null,3:null,4:null};   // latest per-channel {band,freq_mhz,spectrum,rms_dbfs,active,...}
+const CH_OF = {drone:1, terr:2, radar:3, imsi:4};
+let monWs=null, monConnected=false;
+function monConnect(){
+  try{ monWs=new WebSocket('ws://127.0.0.1:8780'); }catch(e){ setTimeout(monConnect,2000); return; }
+  monWs.onopen=()=>{ monConnected=true; };
+  monWs.onclose=()=>{ monConnected=false; setTimeout(monConnect,2000); };
+  monWs.onerror=()=>{ try{monWs.close();}catch(e){} };
+  monWs.onmessage=(ev)=>{ try{ const m=JSON.parse(ev.data);
+    if(m.type==='mon'&&m.ch){ MON[m.ch]=m; }
+    else if(m.type==='ch2_mode'){ syncCh2Mode(m.mode); }
+    else if(m.type==='ch2_lock'){ syncCh2Lock(m); }
+  }catch(e){} };
+}
+monConnect();
+// reflect the backend's current CH2 mode on the toggle (without re-sending)
+let CH2_MODE='scan';
+function syncCh2Mode(mode){
+  CH2_MODE = (mode==='auto')?'auto':'scan';
+  document.querySelectorAll('#terr-mode button').forEach(x=>x.classList.toggle('on',x.dataset.m===mode));
+  const el=document.getElementById('terr-modestat'); if(!el) return;
+  // in Mode 1 the chip is static; in Mode 2 the live lock status (syncCh2Lock) drives it
+  if(CH2_MODE==='scan'){ el.textContent='● scanning all terrestrial bands'; el.className='chip good'; }
+}
+// live Mode-2 state from mon_server: searching all, or locked on one protocol
+let CH2_LOCK_STATE='search';
+function syncCh2Lock(m){
+  CH2_LOCK_STATE = m.state;
+  const el=document.getElementById('terr-modestat'); if(!el) return;
+  if(CH2_MODE!=='auto'){ return; }  // Mode 1: ignore, chip stays "scanning all"
+  if(m.state==='lock'){
+    el.textContent='● LOCKED on '+m.band+(m.freq_mhz?(' · '+m.freq_mhz.toFixed(3)+' MHz'):'')+' — decoding';
+    el.className='chip bad';
+  } else {
+    el.textContent='● searching all terrestrial protocols (2 cycles)…';
+    el.className='chip ok';
+  }
+}
+// Show the SEARCH stepping live: the monitoring feed (8 Hz) carries CH2's current
+// dwell band, so the chip visibly steps TETRA->DMR->P25->NXDN at the plan's dwell
+// rate -- proof the ms dwells are being followed, without the slow console.
+setInterval(function(){
+  if(CH2_MODE!=='auto' || CH2_LOCK_STATE==='lock') return;
+  const el=document.getElementById('terr-modestat'); if(!el) return;
+  const live=MON[2];
+  if(live && live.band){
+    const f = live.freq_mhz ? (' '+live.freq_mhz.toFixed(3)+' MHz') : '';
+    el.textContent='● searching… now '+live.band+f;
+    el.className='chip ok';
+  }
+}, 120);
+// map our dBFS spectrum (approx -120..0) to the canvas' -100..-30 display window
+function monToDisplay(v){ return Math.max(-100, Math.min(-30, v)); }
+function updateLiveChips(k, live){
+  const cf=SIGVIEWS[k];
+  const bandEl=document.getElementById(cf.id+'-band'); if(bandEl&&live.band) bandEl.textContent=live.band;
+  const cfEl=document.getElementById(cf.id+'-cf'); if(cfEl&&live.freq_mhz) cfEl.textContent=live.freq_mhz.toFixed(live.freq_mhz<1000?3:1)+' MHz';
+  const stat=document.getElementById(cf.id+'-stat');
+  if(stat){ stat.textContent = live.active ? ('● ACTIVE '+live.rms_dbfs+' dB') : ('● scanning '+live.rms_dbfs+' dB');
+    stat.className = 'chip '+(live.active?'bad':'good'); }
+}
+
+function drawFFT(k){
+  const cf=SIGVIEWS[k], st=S[k], cv=fitCanvas(document.getElementById(cf.id+'-fft'));
+  const ctx=cv.getContext('2d'),w=cv.width,h=cv.height; ctx.clearRect(0,0,w,h);
+  drawGrid(ctx,w,h);
+  const N=256; const bins=new Float32Array(N);
+  const live = MON[CH_OF[k]];
+  if(!(live && live.spectrum && live.spectrum.length>8)){
+    noData(ctx,w,h); document.getElementById(cf.id+'-pk').textContent='—'; return;
+  }
+  // REAL spectrum from monitoring (raw dB, persistence-smoothed)
+  const s=live.spectrum, M=s.length;
+  for(let i=0;i<N;i++){ const v=s[Math.floor(i*M/N)]; st.fftBg[i]=st.fftBg[i]*0.5+v*0.5; bins[i]=st.fftBg[i]; }
+  updateLiveChips(k, live);
+  // auto-range the y-axis to this frame (so every channel's spectrum fills the graph)
+  let ymin=1e9,ymax=-1e9,pkx=0;
+  for(let i=0;i<N;i++){ if(bins[i]<ymin)ymin=bins[i]; if(bins[i]>ymax){ymax=bins[i];pkx=i;} }
+  // smooth the range across frames to stop it jumping
+  st.ylo = (st.ylo==null)?ymin:st.ylo*0.9+ymin*0.1;
+  st.yhi = (st.yhi==null)?ymax:st.yhi*0.9+ymax*0.1;
+  const lo=st.ylo-3, hi=Math.max(st.yhi+3, lo+6);
+  const Y=v=>h-((v-lo)/(hi-lo))*h;
+  // fill
+  ctx.beginPath(); ctx.moveTo(0,h);
+  for(let i=0;i<N;i++){ ctx.lineTo(w*i/(N-1), Y(bins[i])); }
+  ctx.lineTo(w,h); ctx.closePath(); ctx.fillStyle='rgba(23,105,224,0.10)'; ctx.fill();
+  ctx.beginPath();
+  for(let i=0;i<N;i++){ const x=w*i/(N-1), y=Y(bins[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.strokeStyle=getCSS('--blue'); ctx.lineWidth=1.5; ctx.stroke();
+  // peak marker
+  ctx.fillStyle=getCSS('--red'); ctx.beginPath(); ctx.arc(w*pkx/(N-1),Y(ymax),3,0,7); ctx.fill();
+  document.getElementById(cf.id+'-pk').textContent='peak '+ymax.toFixed(0)+' dB';
+}
+function drawTime(k){
+  const cf=SIGVIEWS[k], st=S[k], cv=fitCanvas(document.getElementById(cf.id+'-time'));
+  const ctx=cv.getContext('2d'),w=cv.width,h=cv.height; ctx.clearRect(0,0,w,h);
+  drawGrid(ctx,w,h,4,8);
+  const live=MON[CH_OF[k]];
+  if(!(live && live.time && live.time.length>8)){
+    noData(ctx,w,h); document.getElementById(cf.id+'-tv').textContent='—'; return;
+  }
+  // REAL |IQ| envelope (dBFS). Auto-range.
+  const s=live.time, N=s.length; let lo=1e9,hi=-1e9;
+  for(const v of s){ if(v<lo)lo=v; if(v>hi)hi=v; }
+  st.tlo=(st.tlo==null)?lo:st.tlo*0.9+lo*0.1; st.thi=(st.thi==null)?hi:st.thi*0.9+hi*0.1;
+  const a=st.tlo-2,b=Math.max(st.thi+2,a+6), Y=v=>h-((v-a)/(b-a))*h;
+  ctx.beginPath();
+  for(let i=0;i<N;i++){ const x=w*i/(N-1), y=Y(s[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.strokeStyle=getCSS('--blue'); ctx.lineWidth=1.3; ctx.stroke();
+  document.getElementById(cf.id+'-tv').textContent = (live.active?'signal ':'noise ')+hi.toFixed(0)+' dB';
+}
+function drawPolar(k){
+  const cf=SIGVIEWS[k], st=S[k], cv=fitCanvas(document.getElementById(cf.id+'-polar'));
+  const ctx=cv.getContext('2d'),w=cv.width,h=cv.height,cx=w/2,cy=h/2,R=Math.min(w,h)/2-10;
+  ctx.clearRect(0,0,w,h);
+  // rings
+  ctx.strokeStyle=getCSS('--grid'); ctx.lineWidth=1;
+  for(let r=R;r>0;r-=R/3){ ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(cx-R,cy);ctx.lineTo(cx+R,cy);ctx.moveTo(cx,cy-R);ctx.lineTo(cx,cy+R); ctx.stroke();
+  const live=MON[CH_OF[k]];
+  if(!(live && live.iq && live.iq.length>8)){
+    noData(ctx,w,h); document.getElementById(cf.id+'-pv').textContent='—'; return;
+  }
+  // REAL IQ scatter (I vs Q): noise = centred blob, signal = structure/ring
+  const iq=live.iq;
+  ctx.fillStyle = live.active ? 'rgba(224,36,36,0.55)' : 'rgba(23,105,224,0.45)';
+  for(let n=0;n<iq.length-1;n+=2){ const x=cx+iq[n]*R*0.92, y=cy-iq[n+1]*R*0.92;
+    ctx.beginPath(); ctx.arc(x,y,1.6,0,7); ctx.fill(); }
+  document.getElementById(cf.id+'-pv').textContent = live.active?'signal IQ':'noise IQ';
+}
+function noData(ctx,w,h){
+  ctx.fillStyle=getCSS('--muted'); ctx.font='12px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('waiting for this band’s dwell…', w/2, h/2); ctx.textAlign='start';
+}
+
+/* =================== DETECTION TABLES =================== */
+function tickDetections(k){
+  const cf=SIGVIEWS[k], st=S[k];
+  const live=MON[CH_OF[k]];
+  // Real data only: log a detection ONLY when the channel is really active
+  // (real band + freq from the monitoring feed). No feed / not active -> nothing.
+  if(live && live.spectrum && live.spectrum.length>8){
+    if(!live.active) return;
+    if(st._lastDet && (performance.now()-st._lastDet)<1500) return;  // debounce
+    st._lastDet=performance.now();
+    const mhz=live.freq_mhz||0;
+    let cells;
+    if(k==='drone') cells=`<td>${live.band||'—'}</td><td class='r'>${mhz.toFixed(1)}</td><td class='r'>${live.rms_dbfs}</td><td class='r'>—</td><td><span class='pill red'>RF</span></td>`;
+    else if(k==='radar') cells=`<td>${live.band||'—'}</td><td class='r'>—</td><td class='r'>—</td><td>—</td><td><span class='pill'>${mhz.toFixed(0)} MHz</span></td>`;
+    else cells=`<td>${live.band||'—'}</td><td>—</td><td class='r'>${mhz.toFixed(1)}</td><td class='r'>${live.rms_dbfs}</td><td><span class='badge on'>seen</span></td>`;
+    st.rows.unshift({brg:null,cells}); if(st.rows.length>8) st.rows.pop();
+    document.getElementById(cf.id+'-tbody').innerHTML=st.rows.map(r=>`<tr>${r.cells}</tr>`).join('');
+    document.getElementById(cf.id+'-cnt').textContent=st.rows.length;
+  }
+  // no live feed, or not active -> no detection rows (real data only)
+}
+
+/* =================== ANIMATION LOOP (only the active signal view draws) =================== */
+function loop(){
+  if(document.getElementById('runToggle').checked && SIGVIEWS[curView]){
+    const k=curView; S[k].t++;
+    drawFFT(k); drawTime(k); drawPolar(k); tickDetections(k);
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* =================== BACKEND CONFIG VIEW (unchanged logic) =================== */
+function frameMs(ch){ return ch.bands.reduce((s,b)=>s+Number(b.dwell_ms)+Number(CFG.switch_ms),0); }
+function renderBackend(){
+  document.getElementById('switchMs').value = CFG.switch_ms;
+  document.getElementById('sampMs').value = (CFG.samp_rate/1e6);
+  const wrap=document.getElementById('channels'); wrap.innerHTML='';
+  CFG.channels.forEach((ch,ci)=>{
+    const card=document.createElement('div'); card.className='card';
+    let rows = ch.bands.map((b,bi)=>`
+      <tr>
+        <td><input class="nm" style="width:100%" value="${b.name.replace(/"/g,'&quot;')}" data-c="${ci}" data-b="${bi}" data-k="name"></td>
+        <td class="r"><input class="f" type="number" step="0.0001" value="${b.freq_mhz}" data-c="${ci}" data-b="${bi}" data-k="freq_mhz"></td>
+        <td class="r"><input class="num" type="number" step="1" value="${b.dwell_ms}" data-c="${ci}" data-b="${bi}" data-k="dwell_ms"></td>
+        <td class="r"><button class="x" data-del="${ci}:${bi}">×</button></td>
+      </tr>`).join('');
+    card.innerHTML=`
+      <div class="chead"><h2>${ch.name}</h2><span class="port">${ch.port} · ${ch.bands.length} bands</span></div>
+      <table>
+        <thead><tr><th>Band</th><th class="r">Freq MHz</th><th class="r">Dwell ms</th><th class="r"></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="addrow">
+        <input class="nm" placeholder="band name" id="an${ci}">
+        <input class="f" type="number" step="0.0001" placeholder="MHz" id="af${ci}">
+        <input class="num" type="number" step="1" placeholder="dwell ms" id="ad${ci}">
+        <button data-add="${ci}">+ Add band</button>
+      </div>
+      <div class="frame">Frame: <b>${(frameMs(ch)/1000).toFixed(2)} s</b> &nbsp;(${ch.bands.length} looks × dwell + ${CFG.switch_ms} ms switch)</div>`;
+    wrap.appendChild(card);
+  });
+  wireBackend();
+}
+function wireBackend(){
+  document.querySelectorAll('#view-backend input[data-k]').forEach(inp=>inp.onchange=()=>{
+    const c=+inp.dataset.c,b=+inp.dataset.b,k=inp.dataset.k;
+    CFG.channels[c].bands[b][k] = (k==='name')?inp.value:Number(inp.value);
+    if(k!=='name') renderBackend();
+  });
+  document.querySelectorAll('#view-backend button[data-del]').forEach(btn=>btn.onclick=()=>{
+    const [c,b]=btn.dataset.del.split(':').map(Number);
+    CFG.channels[c].bands.splice(b,1); renderBackend();
+  });
+  document.querySelectorAll('#view-backend button[data-add]').forEach(btn=>btn.onclick=()=>{
+    const c=+btn.dataset.add;
+    const nm=document.getElementById('an'+c).value.trim();
+    const f=parseFloat(document.getElementById('af'+c).value);
+    const d=parseFloat(document.getElementById('ad'+c).value);
+    if(!nm||isNaN(f)||isNaN(d)){flash('fill name, MHz and dwell');return;}
+    CFG.channels[c].bands.push({name:nm,freq_mhz:f,dwell_ms:d}); renderBackend();
+  });
+}
+document.getElementById('switchMs').onchange=e=>{CFG.switch_ms=Number(e.target.value);renderBackend();};
+document.getElementById('sampMs').onchange=e=>{CFG.samp_rate=Number(e.target.value)*1e6;};
+document.getElementById('resetBtn').onclick=()=>{CFG=JSON.parse(JSON.stringify(INITIAL));renderBackend();for(const k in SIGVIEWS)refreshBandInfo(k);flash('reset');};
+document.getElementById('exportBtn').onclick=()=>{
+  const blob=new Blob([JSON.stringify(CFG,null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='scan_plan_config.json';a.click();
+  flash('exported scan_plan_config.json');
+};
+document.getElementById('applyBtn').onclick=()=>flash('Apply: backend control API not wired yet — use Export for now');
+function flash(m){const s=document.getElementById('status');s.textContent=m;setTimeout(()=>{if(s.textContent===m)s.textContent='';},4000);}
+
+/* =================== INIT =================== */
+renderHW(); renderBackend();
+</script>
+</body>
+</html>
