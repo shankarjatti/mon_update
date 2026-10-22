@@ -55,6 +55,22 @@ guru_DF_v1, guru_MON_v1) — user, 2026-10-01.
 
 ## 2026-10-22
 
+### 2026-10-22 17:xx — user: "still graphs are not good in CH1 … copy the GNU Radio graph style and set it 100 % same" · "remove waterfall graph" — DONE, checked in the browser
+* Reference taken from the REAL GNU Radio 3.8 qtgui sinks on this PC: freq_sink_c, time_sink_c, waterfall_sink_c, const_sink_c rendered
+  off-screen (GRC default settings, plus grid + control panel) to PNG (`monitoring/guru_mon_scan/tools/render_gr_sinks.py`), then copied:
+  light-grey widget, white canvas with grey frame, black axes with major + minor (5 per major) ticks, 13 px DejaVu Sans labels, bold 15 px axis
+  titles, 1 px traces Data 0 = blue / Data 1 = red, legend right of the canvas, default ranges Freq −140…10 dB ("Relative Gain (dB)",
+  "Frequency (MHz)", 3 decimals), Time ±1 ("Amplitude", "Time (us/ms)" with thousands separators), Constellation ±2 ("In-phase" /
+  "Quadrature", filled blue dots), dotted trigger-level line, Qwt-style tracker text next to the cursor, left-drag zoom box, right-click = zoom
+  out one step, double-click = reset; left margin sized to the tick labels.
+* GNU Radio control panels next to each plot: Frequency — Trace Options (Max Hold, Min Hold, Avg slider), Axis Options (Grid, Axis Labels,
+  Y Range ±10 dB, Ref Level ±10 dB, Autoscale), FFT (size, window: Blackman-harris default as GRC), Trigger (Free/Auto/Normal, Level ±),
+  Extras (Stop, Save Image, Export CSV); Time — Axes (Autoscale, Grid, Axis Labels, Y Offset ±, Y Range ±, X Max ±), Trigger (mode, slope,
+  channel, Level ±, Delay ±), Extras (Autoscale, Stop, Save Image, Export CSV); Constellation — Axes (Autoscale, Grid, Axis Labels, Range ±),
+  Extras (Stop, Save Image).
+* Waterfall sink (built in the GNU Radio look: Multi-Color map, Time (s) axis) — REMOVED on the user's request.
+* Checked in the built-in browser: 0 console errors, all CH1 sinks drawing live data. Ctrl+Shift+R needed in the user's Chrome.
+
 ### 2026-10-22 15:xx–16:xx — user: "remove DC offset from all channels, all bands should detect when active" · CH1 UI: one band = lock, MON plan = run the plan, all GNU Radio plot options · "graphs lag, not proper" · "continuous signal, not discrete" · "come only for CH1 now" — DONE, VERIFIED on the X310
 * **DC removal, all 4 channels** (`mon_server.py`, right after the radio, before the detector AND the published IQ): y = x − single-pole
   low-pass(x), alpha 0.001 (≈ 160 Hz high-pass at 1 MS/s), option `--dc-alpha` (0 = off). MEASURED DC left (median): CH1 −6 → **−56 dBFS**,
