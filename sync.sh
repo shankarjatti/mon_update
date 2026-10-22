@@ -12,7 +12,7 @@ for f in scan_plan.py mon_scan.py mon_server.py mon_pub.py mon_sub_example.py mo
          run_mon_scan.sh securecom_ui.html monitoring_ui.html README_MON_SCAN.md BUILD_LOG.md BLOCK_DIAGRAM.md look_power.py; do
   [ -f "$R/guru_mon_scan/$f" ] && cp -p "$R/guru_mon_scan/$f" "$M/monitoring/guru_mon_scan/"
 done
-rsync -a --delete --exclude __pycache__ --exclude ch2_lock.txt --exclude ch2_mode.txt \
+rsync -a --delete --exclude __pycache__ --exclude ch2_lock.txt --exclude ch2_mode.txt --exclude 'pin_ch*.txt' \
       "$R/edge_ch2/" "$M/monitoring/edge_ch2/"
 rsync -a --delete --exclude __pycache__ --exclude '*.wav' --exclude deps \
       "$R/terrestrial38/" "$M/monitoring/terrestrial38/"
